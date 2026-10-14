@@ -1,0 +1,68 @@
+TT_ID,TT_NAME,TT_CODE,TT_CATEGORY,TT_VARIATION
+4,Aerobic Suspended Growth,ASG,Biological,"activated sludge, aerobic lagoon"
+5,Aerobic Biological Treatment,AD,Biological,"aerated biological removal, digestion"
+6,Alkaline Chlorination,AC,Chemical,
+7,"Hydrolysis, Acid or Alkaline",AKH,Chemical,
+8,Anaerobic Biological Treatment,AND,Biological,"non-aerated, anoxic, facultative"
+9,Anaerobic Suspended Growth,ANSG,Biological,anaerobic lagoon
+10,Biological Nutrient Removal,BNR,Biological,Modified Ludzack-Ettinger (MLE) Process
+11,Unspecified Biological Treatment,BIO,Biological,*General term - Use ONLY for unspecified biological treatments
+12,Chemical Phosphorous Removal,CPR,Chemical,
+13,Chemical Precipitation,ChemPre,Chemical,coagulation and flocculation
+15,Clarification,CLAR,"Physical, NEC","Settling, sedimentation, settling tank"
+18,Constructed Wetlands,WET,Biological,"Reed bed, artificial wetland, peat land"
+20,Chemical Disinfection,CD,Chemical,"Hydroxyl Radical, Oxygen, Ozone, Hydrogen Peroxide, Chlorine species, Halogens"
+21,Dissolved Air Flotation,DAF,"Physical, NEC",
+22,Dissolved Gas Flotation,DGF,"Physical, NEC",
+25,Ion Exchange,ION,Chemical,"softening, deionization"
+26,Micro- and Ultra-Membrane Filtration,MF,Membrane,"Includes microfiltration, ultrafiltration and other engineered materials"
+27,Reverse Osmosis,RO,Membrane,
+28,Aerobic Fixed Film Biological Treatment,AFF,Biological,"attached growth, fixed bed reactor, rotating biological contactor, trickling filter, fluidized bed reactor"
+29,Membrane Bioreactor,MBR,Biological,
+31,UV,UV,Chemical,ultraviolet light or radiation
+32,Nanofiltration,NANO,Membrane,
+33,Adsorptive Media,ADSM,Sorption,
+36,Moving Bed Bioreactor,MBBR,Biological,
+37,Liquid Extraction,LE,Chemical,"(flotation) liquid-liquid extraction, solvent extraction"
+39,Ultrasound,US,"Physical, NEC",Sonification
+40,Chemical Oxidation,CO,Chemical,"hydrogen peroxide, permanganate, chlorine, bleach"
+41,Powdered Activated Carbon,PAC,Sorption,
+42,Granular-Media Filtration,FI,Filtration,Conventional filtration
+43,Aeration,AIR,"Physical, NEC","aeration channel, aerobic polishing cell"
+44,Zero Valent Iron,ZVI,Chemical,nZVI
+45,Mechanical Pre-Treatment,MPT,"Physical, NEC","screen, bar, rack, grit chamber, comminuter, grinder, preliminary treatment"
+46,Dechlorination,DCL,Chemical,
+47,Anaerobic Fixed Film Biological Treatment,ANFF,Biological,"attached growth, fixed bed reactor, rotating biological contactor, trickling filter, fluidized bed reactor"
+48,Granular Activated Carbon Unit,GAC,Sorption,
+49,Ozonation,OZ,Chemical,advanced oxidation process
+51,Controlled Hydrodynamic Cavitation,CHC,"Physical, NEC",mechanical energy device
+53,Crystallization,CYS,"Physical, NEC",
+54,Distillation,DST,"Physical, NEC",
+55,Electrocoagulation,EC,"Physical, NEC",
+56,Capacitive Deionization,DEI,"Physical, NEC",electro-sorption
+57,Evaporation,EVAP,"Physical, NEC",
+58,Stripping,ST,"Physical, NEC",air or gas stripping
+60,Flow Equalization,EQ,"Physical, NEC","buffer tank, flow control,  flow balance"
+61,Enhanced Biological Phosphorus Removal,EBPR,Biological,Enhanced biological phosphorus uptake
+62,Electrodialysis,ED,"Physical, NEC",
+64,Denitrification Filters,FDN,Biological,
+65,Forward Osmosis,FO,Membrane,engineered or manipulated osmosis
+66,"Advanced Oxidation Processes, NEC",AOP,Chemical,"Supercritical Water Oxidation, Catalytic Oxidation, Photo Catalysis (UV + TiO2) , Fenton's Reagent"
+67,Biologically Active Filters,BAC,Biological,"Granular media that support microbial growth, submerged aerated filter"
+68,Biofilm Airlift Suspension Reactor,BASR,Biological,airlift bioreactor
+69,Centrifugal Separator,CS,"Physical, NEC",(liquid) hydrocyclone
+70,Gasification,GAS,Chemical,"downdraft, updraft or fluidized bed gasifier"
+71,Degasification,DGS,"Physical, NEC","membrane degasification, forced draft degasification"
+72,Cloth Filtration,CF,Filtration,
+73,Oil/Water Separation,OW,"Physical, NEC",
+74,Bag and Cartridge Filtration,BCF,Filtration,
+75,Chemical Nitrogen Removal,CNR,Chemical,Redox reaction to remove nitrogen from water or convert between different forms of nitrogen.
+76,Wet Air Oxidation,WAO,Chemical,The oxidation of soluble or suspended components in water using oxygen as the oxidizing agent. Air is used as the source of oxygen.
+77,Integrated Fixed-Film Activated Sludge,IFAS,Biological,Add plastic carriers (typically a retrofit)
+78,Ballasted Clarification,BCLAR,"Physical, NEC","BioMag, CoMag, enhanced settling, magnetite, microsand"
+79,Anaerobic Membrane Bioreactor,AnMBR,Biological,
+80,Granular Sludge Sequencing Batch Reactor,GSBR,Biological,
+81,Bioaugmentation,AUG,Biological,
+82,Surface Impoundment,SI,"Physical, NEC",
+83,Membrane Distillation,MD,Membrane,
+84,Other Filtration,FILT,Filtration,"Filtration not elsewhere classified or unspecified, excluding any membrane filtration, bag & cartridge filtration (BCF), cloth filtration (CF), or granular media filtration (FI)."
