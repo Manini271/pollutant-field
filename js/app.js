@@ -430,7 +430,6 @@
   document.getElementById("search").addEventListener("input", e => {
     state.query = e.target.value.trim().toLowerCase(); draw();
   });
-  document.getElementById("updated").textContent = DATA.updated.replace("IWTT data most recently updated ", "updated ").replace(/\.$/, "");
 
   // ------------------------------------------------------------ hover, click
   const tip = document.getElementById("tip");
