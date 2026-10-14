@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Who touches this water? Providence pilot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+:root {
+  --panel: rgba(250, 251, 250, 0.92); --ink: #13262d; --muted: #5b6e73; --rule: rgba(19, 38, 45, 0.14);
+  --regulator: #c98a0e; --permit_holder: #d23b40; --partner: #2d84c9; --innovator: #3f9a4c;
+  --advocate: #8b56c2; --research: #1f9a92; --funder: #6b6b6b;
+  --font: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light; box-sizing: border-box;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --panel: rgba(14, 24, 28, 0.88); --ink: #e7efed; --muted: #9db0b3; --rule: rgba(231, 239, 237, 0.14);
+    --regulator: #f2b134; --permit_holder: #ff6b6f; --partner: #5ec4ff; --innovator: #7ee08a;
+    --advocate: #c99bff; --research: #4dd8cf; --funder: #d8d8d8; color-scheme: dark;
+  }
+}
+*, *::before, *::after { box-sizing: inherit; }
+html, body { height: 100%; margin: 0; background: #0b1215; font-family: var(--font); color: var(--ink); }
+#map { position: absolute; inset: 0; }
+
+.panel { position: absolute; top: 16px; left: 16px; bottom: 16px; width: 320px; background: var(--panel);
+  backdrop-filter: blur(10px); border-radius: 14px; padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+h1 { font-size: 22px; line-height: 1.1; margin: 0; }
+.sub { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; text-transform: none; }
+.types { display: grid; gap: 4px; }
+.type { display: flex; align-items: center; gap: 8px; font-size: 13px; background: none; border: 0; padding: 3px 0;
+  color: var(--ink); cursor: pointer; text-align: left; font-family: inherit; }
+.type[aria-pressed="false"] { opacity: .35; }
+.sw { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+.count { margin-left: auto; color: var(--muted); font-size: 12px; }
+.lines { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
+.lines span { display: inline-block; width: 26px; border-top: 2px solid var(--ink); vertical-align: middle; margin-right: 6px; }
+.lines .dash { border-top-style: dashed; opacity: .7; }
+.status { font-size: 12px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 10px; line-height: 1.45; }
+.status b { color: var(--ink); font-weight: 600; }
+
+.card { border-top: 1px solid var(--rule); padding-top: 12px; font-size: 13px; line-height: 1.45; }
+.card h3 { font-size: 17px; margin: 2px 0 6px; line-height: 1.2; }
+.card dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0; }
+.card dt { color: var(--muted); }
+.card dd { margin: 0; }
+.badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; }
+.unverified { color: var(--permit_holder); }
+.verified { color: var(--innovator); }
+
+.actor { background: none; border: 0; padding: 0; font: inherit; display: flex; align-items: center; gap: 6px; cursor: pointer; transform: translateY(-50%); }
+.actor .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.4); flex: none; }
+.actor .lab { font-size: 12px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.9); white-space: nowrap; max-width: 210px; overflow: hidden; text-overflow: ellipsis; }
+.actor.left { flex-direction: row-reverse; }
+.actor.dim { opacity: .2; }
+.actor.on .dot { outline: 3px solid #fff; }
+button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
+@media (max-width: 700px) { .panel { top: auto; height: 46vh; width: auto; right: 16px; } }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<aside class="panel" aria-label="Actors">
+  <div>
+    <h1>Who touches this water?</h1>
+    <p class="sub" id="wbName">Loading…</p>
+  </div>
+  <section><h2>Actors by role</h2><div class="types" id="types"></div></section>
+  <section class="lines">
+    <h2>Lines</h2>
+    <div><span></span>Legal authority over the water (regulates, permits, discharges)</div>
+    <div><span class="dash"></span>Working relationship (hosts, funds, researches, advocates)</div>
+    <div><span style="border-color:#40e0ff"></span>River, from USGS data</div>
+    <div>● <span style="width:0;border:0;margin:0"></span>Small cyan dots: monitoring sites (Water Quality Portal)</div>
+  </section>
+  <div id="card" class="card" hidden></div>
+  <p class="status" id="status"></p>
+</aside>
+
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script>
+(async () => {
+  const SLUG = "providence";
+  const FALLBACK_CENTER = [-71.4118, 41.8273];
+  const TYPES = {
+    regulator: "Regulators", permit_holder: "Permit holders", partner: "Partners & hosts",
+    innovator: "Innovators", advocate: "Advocates", research: "Research", funder: "Funders"
+  };
+  const LEGAL = new Set(["regulates", "permits", "oversees", "discharges_into"]);
+  const css = getComputedStyle(document.documentElement);
+  const color = t => css.getPropertyValue("--" + t).trim() || "#999";
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const status = [];
+
+  async function load(path) {
+    try { const r = await fetch(path); return r.ok ? await r.json() : null; } catch { return null; }
+  }
+  if (location.protocol === "file:") status.push("<b>Open through a local server</b> (python3 -m http.server) so the data files can load.");
+
+  const actorsDoc = await load(`../data/clean/${SLUG}_actors.json`);
+  const river = await load(`../data/clean/${SLUG}_river.geojson`);
+  const monitors = await load(`../data/clean/${SLUG}_monitors.geojson`);
+  const actors = actorsDoc ? actorsDoc.actors : [];
+  document.getElementById("wbName").textContent = actorsDoc ? actorsDoc.waterbody : "No actor file found";
+
+  status.push(`<b>${actors.length}</b> actors, hand-entered (${actors.filter(a => !a.verified).length} unverified)`);
+  status.push(river ? `<b>${river.features.length}</b> river segments from USGS` : "River not fetched yet: run <code>python pipeline/fetch_waterbody.py</code>");
+  if (monitors) status.push(`<b>${monitors.features.length}</b> monitoring sites from the Water Quality Portal`);
+
+  // river vertices, used to place the ring and anchor lines
+  const verts = [];
+  (river?.features || []).forEach(f => {
+    const g = f.geometry; if (!g) return;
+    const lines = g.type === "MultiLineString" ? g.coordinates : g.type === "LineString" ? [g.coordinates] : [];
+    lines.forEach(l => l.forEach(c => verts.push(c)));
+  });
+  const center = verts.length
+    ? [verts.reduce((s, c) => s + c[0], 0) / verts.length, verts.reduce((s, c) => s + c[1], 0) / verts.length]
+    : FALLBACK_CENTER;
+  const nearest = p => verts.length ? verts.reduce((b, c) => (Math.hypot(c[0] - p[0], c[1] - p[1]) < Math.hypot(b[0] - p[0], b[1] - p[1]) ? c : b)) : center;
+
+  // non-spatial actors sit on a ring around the water, grouped by role
+  const order = Object.keys(TYPES);
+  actors.sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
+  const R = 0.045, k = Math.cos(center[1] * Math.PI / 180);
+  actors.forEach((a, i) => {
+    const ang = Math.PI / 2 - (2 * Math.PI * i) / actors.length;
+    a.pos = a.location ? [a.location.lon, a.location.lat] : [center[0] + (R / k) * Math.cos(ang), center[1] + R * Math.sin(ang)];
+    a.anchor = nearest(a.pos);
+    a.left = !a.location && Math.cos(ang) < -0.05;   // labels on the left half point outward
+  });
+  const edges = {
+    type: "FeatureCollection",
+    features: actors.map(a => ({ type: "Feature", properties: { id: a.id, type: a.type, legal: LEGAL.has(a.relationship) },
+      geometry: { type: "LineString", coordinates: [a.pos, a.anchor] } }))
+  };
+
+  const map = new maplibregl.Map({
+    container: "map",
+    style: {
+      version: 8,
+      projection: { type: "globe" },
+      sources: { sat: { type: "raster", tileSize: 256, maxzoom: 19,
+        tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+        attribution: "Imagery © Esri, Maxar, Earthstar Geographics" } },
+      layers: [{ id: "sat", type: "raster", source: "sat" }]
+    },
+    center: [-40, 30], zoom: 1.4, attributionControl: { compact: true }
+  });
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+  map.on("load", () => {
+    const typeColor = ["match", ["get", "type"], ...order.flatMap(t => [t, color(t)]), "#999"];
+    map.addSource("edges", { type: "geojson", data: edges });
+    map.addLayer({ id: "edges-legal", type: "line", source: "edges", filter: ["==", ["get", "legal"], true],
+      paint: { "line-color": typeColor, "line-width": 2.5, "line-opacity": 0.9 } });
+    map.addLayer({ id: "edges-soft", type: "line", source: "edges", filter: ["==", ["get", "legal"], false],
+      paint: { "line-color": typeColor, "line-width": 1.6, "line-opacity": 0.75, "line-dasharray": [2, 2] } });
+    if (river) {
+      map.addSource("river", { type: "geojson", data: river });
+      map.addLayer({ id: "river-glow", type: "line", source: "river", paint: { "line-color": "#40e0ff", "line-width": 7, "line-opacity": 0.25, "line-blur": 3 } });
+      map.addLayer({ id: "river", type: "line", source: "river", paint: { "line-color": "#40e0ff", "line-width": 2.5 } });
+    }
+    if (monitors) {
+      map.addSource("monitors", { type: "geojson", data: monitors });
+      map.addLayer({ id: "monitors", type: "circle", source: "monitors",
+        paint: { "circle-radius": 4, "circle-color": "#40e0ff", "circle-stroke-color": "#06262c", "circle-stroke-width": 1.5 } });
+      map.on("click", "monitors", e => {
+        const p = e.features[0].properties;
+        new maplibregl.Popup().setLngLat(e.lngLat)
+          .setHTML(`<b>${esc(p.name)}</b><br>${esc(p.id)}<br><small>${esc(p.source)}</small>${p.url ? `<br><a href="${esc(p.url)}" target="_blank" rel="noopener">Open site record</a>` : ""}`)
+          .addTo(map);
+      });
+      map.on("mouseenter", "monitors", () => map.getCanvas().style.cursor = "pointer");
+      map.on("mouseleave", "monitors", () => map.getCanvas().style.cursor = "");
+    }
+    const wide = innerWidth > 700;
+    map.flyTo({ center, zoom: 11.4, duration: 4500, essential: true,
+      padding: wide ? { left: 360, top: 20, right: 20, bottom: 20 } : { left: 10, top: 10, right: 10, bottom: innerHeight * 0.48 } });
+  });
+
+  // HTML markers for actors
+  const markers = actors.map(a => {
+    const el = document.createElement("button");
+    el.className = "actor" + (a.left ? " left" : "");
+    el.setAttribute("aria-label", a.name);
+    el.innerHTML = `<span class="dot" style="background:${color(a.type)}"></span><span class="lab">${esc(a.name)}</span>`;
+    el.addEventListener("click", ev => { ev.stopPropagation(); select(a); });
+    a.el = el;
+    return new maplibregl.Marker({ element: el, anchor: a.left ? "right" : "left" }).setLngLat(a.pos).addTo(map);
+  });
+
+  // legend toggles
+  const on = new Set(order);
+  const typesEl = document.getElementById("types");
+  function drawTypes() {
+    typesEl.innerHTML = "";
+    order.forEach(t => {
+      const n = actors.filter(a => a.type === t).length; if (!n) return;
+      const b = document.createElement("button");
+      b.className = "type"; b.setAttribute("aria-pressed", on.has(t));
+      b.innerHTML = `<span class="sw" style="background:${color(t)}"></span>${TYPES[t]}<span class="count">${n}</span>`;
+      b.onclick = () => { on.has(t) ? on.delete(t) : on.add(t); apply(); drawTypes(); };
+      typesEl.appendChild(b);
+    });
+  }
+  function apply() {
+    actors.forEach(a => a.el.classList.toggle("dim", !on.has(a.type)));
+    const f = ["in", ["get", "type"], ["literal", [...on]]];
+    if (map.getLayer("edges-legal")) {
+      map.setFilter("edges-legal", ["all", ["==", ["get", "legal"], true], f]);
+      map.setFilter("edges-soft", ["all", ["==", ["get", "legal"], false], f]);
+    }
+  }
+  drawTypes();
+
+  const card = document.getElementById("card");
+  function select(a) {
+    actors.forEach(x => x.el.classList.toggle("on", x === a));
+    card.hidden = false;
+    card.innerHTML = `
+      <span class="badge ${a.verified ? "verified" : "unverified"}">${a.verified ? "Verified" : "Unverified"}</span>
+      <h3>${esc(a.name)}</h3>
+      <dl>
+        <dt>Role</dt><dd><span class="sw" style="display:inline-block;background:${color(a.type)}"></span> ${esc(TYPES[a.type] || a.type)}</dd>
+        <dt>Relationship</dt><dd>${esc(a.relationship.replace(/_/g, " "))}</dd>
+        <dt>How</dt><dd>${esc(a.instrument)}</dd>
+        <dt>Source</dt><dd>${esc(a.source)}</dd>
+      </dl>`;
+  }
+
+  document.getElementById("status").innerHTML = status.join("<br>");
+})();
+</script>
+</body>
+</html>
