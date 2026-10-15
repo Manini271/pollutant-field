@@ -7,7 +7,7 @@
 <link href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css" rel="stylesheet">
 <style>
 :root {
-  --panel: rgba(250, 251, 250, 0.92); --ink: #13262d; --muted: #5b6e73; --rule: rgba(19, 38, 45, 0.14);
+  --page: #ffffff; --panel: #ffffff; --panel-edge: rgba(19, 38, 45, 0.14); --ink: #13262d; --muted: #5b6e73; --rule: rgba(19, 38, 45, 0.14);
   --regulator: #c98a0e; --permit_holder: #d23b40; --partner: #2d84c9; --innovator: #3f9a4c;
   --advocate: #8b56c2; --research: #1f9a92; --funder: #6b6b6b;
   --font: "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -15,17 +15,17 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --panel: rgba(14, 24, 28, 0.88); --ink: #e7efed; --muted: #9db0b3; --rule: rgba(231, 239, 237, 0.14);
+    --page: #0b1215; --panel: rgba(14, 24, 28, 0.88); --panel-edge: transparent; --ink: #e7efed; --muted: #9db0b3; --rule: rgba(231, 239, 237, 0.14);
     --regulator: #f2b134; --permit_holder: #ff6b6f; --partner: #5ec4ff; --innovator: #7ee08a;
     --advocate: #c99bff; --research: #4dd8cf; --funder: #d8d8d8; color-scheme: dark;
   }
 }
 *, *::before, *::after { box-sizing: inherit; }
-html, body { height: 100%; margin: 0; background: #0b1215; font-family: var(--font); color: var(--ink); }
+html, body { height: 100%; margin: 0; background: var(--page); font-family: var(--font); color: var(--ink); }
 #map { position: absolute; inset: 0; }
 
 .panel { position: absolute; top: 16px; left: 16px; bottom: 16px; width: 320px; background: var(--panel);
-  backdrop-filter: blur(10px); border-radius: 14px; padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+  backdrop-filter: blur(10px); border: 1px solid var(--panel-edge); border-radius: 14px; padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
 h1 { font-size: 22px; font-weight: 700; line-height: 1.1; margin: 0; }
 .sub { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
 h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; text-transform: none; }
