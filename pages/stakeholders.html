@@ -4,16 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Stakeholder Map</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css" rel="stylesheet">
 <style>
 :root {
   --panel: rgba(250, 251, 250, 0.92); --ink: #13262d; --muted: #5b6e73; --rule: rgba(19, 38, 45, 0.14);
   --regulator: #c98a0e; --permit_holder: #d23b40; --partner: #2d84c9; --innovator: #3f9a4c;
   --advocate: #8b56c2; --research: #1f9a92; --funder: #6b6b6b;
-  --font: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --font: "Helvetica Neue", Helvetica, Arial, sans-serif;
   color-scheme: light; box-sizing: border-box;
 }
 @media (prefers-color-scheme: dark) {
@@ -29,7 +26,7 @@ html, body { height: 100%; margin: 0; background: #0b1215; font-family: var(--fo
 
 .panel { position: absolute; top: 16px; left: 16px; bottom: 16px; width: 320px; background: var(--panel);
   backdrop-filter: blur(10px); border-radius: 14px; padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
-h1 { font-size: 22px; line-height: 1.1; margin: 0; }
+h1 { font-size: 22px; font-weight: 700; line-height: 1.1; margin: 0; }
 .sub { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
 h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; text-transform: none; }
 .types { display: grid; gap: 4px; }
@@ -46,7 +43,7 @@ h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; te
 .status b { color: var(--ink); font-weight: 600; }
 
 .card { border-top: 1px solid var(--rule); padding-top: 12px; font-size: 13px; line-height: 1.45; }
-.card h3 { font-size: 17px; margin: 2px 0 6px; line-height: 1.2; }
+.card h3 { font-size: 17px; font-weight: 700; margin: 2px 0 6px; line-height: 1.2; }
 .card dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0; }
 .card dt { color: var(--muted); }
 .card dd { margin: 0; }

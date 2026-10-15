@@ -238,7 +238,7 @@
   }
 
   function label(text, x, y, size, weight, color) {
-    ctx.font = `${weight} ${size}px "Bricolage Grotesque", Arial, sans-serif`;
+    ctx.font = `${weight} ${size}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
     ctx.textAlign = "center"; ctx.textBaseline = "bottom";
     ctx.lineWidth = 4; ctx.strokeStyle = C.bg; ctx.lineJoin = "round";
     ctx.strokeText(text, x, y); ctx.fillStyle = color; ctx.fillText(text, x, y);
@@ -312,7 +312,7 @@
       items.sort((a, b) => b.p - a.p);
       const placed = [];
       for (const it of items) {
-        ctx.font = `${it.w} ${it.size}px "Bricolage Grotesque", Arial, sans-serif`;
+        ctx.font = `${it.w} ${it.size}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
         const w = ctx.measureText(it.t).width + 6, box = { x0: it.x - w / 2, x1: it.x + w / 2, y0: it.y - it.size - 2, y1: it.y + 1 };
         if (placed.some(b => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0)) continue;
         placed.push(box); label(it.t, it.x, it.y, it.size, it.w, it.c);
@@ -331,7 +331,7 @@
     rows.forEach((r, i) => {
       const y = top + ch * i;
       ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(left + cw * cols.length, y); ctx.stroke();
-      ctx.font = `700 13px "Bricolage Grotesque", Arial, sans-serif`; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+      ctx.font = `700 13px "Helvetica Neue", Helvetica, Arial, sans-serif`; ctx.textAlign = "right"; ctx.textBaseline = "middle";
       ctx.fillStyle = C.ink; ctx.fillText(r, left - 30, y + ch / 2);
       shapePath(ctx, SHAPES[r], left - 15, y + ch / 2, 6); ctx.fillStyle = C.ink; ctx.fill();
     });
@@ -339,7 +339,7 @@
     const filled = new Set(sim.nodes().map(d => d.leaf));
     rows.forEach((r, i) => cols.forEach((c, j) => {
       if (!filled.has(`${r}|${c}`)) {
-        ctx.font = `400 12px "Bricolage Grotesque", Arial, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = `400 12px "Helvetica Neue", Helvetica, Arial, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.fillStyle = C.muted; ctx.fillText("no data", left + cw * (j + 0.5), top + ch * (i + 0.5));
       }
     }));
