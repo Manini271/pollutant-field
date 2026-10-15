@@ -45,7 +45,12 @@ h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; te
 .lines { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
 .lines span { display: inline-block; width: 26px; border-top: 2px solid var(--ink); vertical-align: middle; margin-right: 6px; }
 .lines .dash { border-top-style: dashed; opacity: .7; }
-.lines .msw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #fff; border: 2px solid #40e0ff; vertical-align: middle; margin: 0 12px 0 7px; }
+.lines div { display: flex; align-items: center; }
+.lines span, .lines i { flex: none; }
+.lines i { display: inline-block; width: 13px; height: 13px; border-radius: 50%; margin: 0 12px 0 7px; }
+.lines .msw { width: 9px; height: 9px; margin: 0 14px 0 9px; background: #fff; border: 2px solid #40e0ff; }
+.lines .fsw { border: 2px solid var(--ink); background: radial-gradient(circle, var(--ink) 0 2px, transparent 2.5px); }
+.lines .rsw { border: 1px solid var(--muted); opacity: .7; }
 .status { font-size: 12px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 10px; line-height: 1.45; }
 .status b { color: var(--ink); font-weight: 600; }
 
@@ -66,6 +71,12 @@ h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; te
 .actor .dot.none { width: 9px; height: 9px; border-width: 1.5px; }
 .actor .shape { flex: none; border-radius: 3px; filter: drop-shadow(0 0 1px rgba(0,0,0,.7)); }
 .actor.on .dot, .actor.on .shape { outline: 3px solid #fff; }
+.focus { position: relative; width: 24px; height: 24px; pointer-events: none; }
+.focus .ring { position: absolute; inset: 0; border-radius: 50%; border: 3px solid #fff; background: rgba(255,255,255,.2);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.55), 0 0 12px rgba(0,0,0,.6); }
+.focus .ring::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: #fff; }
+.focus .lab { position: absolute; left: 31px; top: 50%; transform: translateY(-50%); font-size: 13px; font-weight: 700; color: #fff;
+  white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.9); }
 button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
 @media (max-width: 700px) { .panel { top: auto; height: 46vh; width: auto; right: 16px; } }
 </style>
@@ -90,6 +101,8 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
     <div><span class="dash"></span>Working relationship (hosts, funds, collaborates, researches, advocates)</div>
     <div><span style="border-color:#40e0ff"></span>River, from USGS data</div>
     <div><i class="msw"></i>Monitoring sites (Water Quality Portal)</div>
+    <div><i class="fsw"></i>Deployment site</div>
+    <div><i class="rsw"></i>Actors on the ring have no fixed location; ring position is not geographic.</div>
   </section>
   <div id="card" class="card" hidden></div>
   <p class="status" id="status"></p>
@@ -99,7 +112,7 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
 <script>
 (async () => {
   const SLUG = "providence";
-  const FALLBACK_CENTER = [-71.4118, 41.8273];
+  const FOCUS = [-71.4118, 41.8273];   // WaterFire, Waterplace Park: the deployment site
   const TYPES = {
     regulator: "Regulators", permit_holder: "Permit holders", partner: "Partners & hosts",
     innovator: "Innovators", advocate: "Advocates", research: "Research", funder: "Funders"
@@ -165,33 +178,48 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
   status.push(river ? `<b>${river.features.length}</b> river segments from USGS` : "River not fetched yet: run <code>python pipeline/fetch_waterbody.py</code>");
   if (monitors) status.push(`<b>${monitors.features.length}</b> monitoring sites from the Water Quality Portal`);
 
-  // river vertices, used to place the ring and anchor lines
+  // The ring is centered on the river's bounding box and wide enough to enclose the whole river with a
+  // 20% margin. Without a river it falls back to a ring around the deployment site.
   const verts = [];
   (river?.features || []).forEach(f => {
     const g = f.geometry; if (!g) return;
     const lines = g.type === "MultiLineString" ? g.coordinates : g.type === "LineString" ? [g.coordinates] : [];
     lines.forEach(l => l.forEach(c => verts.push(c)));
   });
-  const center = verts.length
-    ? [verts.reduce((s, c) => s + c[0], 0) / verts.length, verts.reduce((s, c) => s + c[1], 0) / verts.length]
-    : FALLBACK_CENTER;
-  const nearest = p => verts.length ? verts.reduce((b, c) => (Math.hypot(c[0] - p[0], c[1] - p[1]) < Math.hypot(b[0] - p[0], b[1] - p[1]) ? c : b)) : center;
+  let center = FOCUS;
+  if (verts.length) {
+    const xs = verts.map(c => c[0]), ys = verts.map(c => c[1]);
+    center = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+  }
+  const k = Math.cos(center[1] * Math.PI / 180);   // a degree of longitude is shorter at this latitude
+  const R = verts.length ? 1.2 * Math.max(...verts.map(c => Math.hypot((c[0] - center[0]) * k, c[1] - center[1]))) : 0.045;
+  const onRing = ang => [center[0] + (R / k) * Math.cos(ang), center[1] + R * Math.sin(ang)];
+  const ring = { type: "Feature", properties: {},
+    geometry: { type: "LineString", coordinates: Array.from({ length: 129 }, (_, i) => onRing((2 * Math.PI * i) / 128)) } };
 
-  // non-spatial actors sit on a ring around the water, grouped by role
-  const order = Object.keys(TYPES);
-  actors.sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
-  const R = 0.045, k = Math.cos(center[1] * Math.PI / 180);
-  actors.forEach((a, i) => {
-    const ang = Math.PI / 2 - (2 * Math.PI * i) / actors.length;
-    a.pos = a.location ? [a.location.lon, a.location.lat] : [center[0] + (R / k) * Math.cos(ang), center[1] + R * Math.sin(ang)];
-    a.anchor = nearest(a.pos);
-    a.left = !a.location && Math.cos(ang) < -0.05;   // labels on the left half point outward
-  });
-  const edges = {
-    type: "FeatureCollection",
-    features: actors.map(a => ({ type: "Feature", properties: { id: a.id, type: a.type, drole: MODES.deploy.key(a), legal: LEGAL.has(a.relationship) },
-      geometry: { type: "LineString", coordinates: [a.pos, a.anchor] } }))
-  };
+  // Actors without a location sit on the ring in arcs, one arc per category of the active color-by
+  // mode, with a gap between arcs. Their lines run to the deployment site.
+  const edges = { type: "FeatureCollection", features: [] };
+  function placeActors() {
+    const M = MODES[mode], GAP = 1.5;   // gap between arcs, in actor slots
+    const groups = M.order.map(t => actors.filter(a => !a.location && M.key(a) === t)).filter(g => g.length);
+    const slots = groups.reduce((n, g) => n + g.length, 0) + GAP * groups.length;
+    let s = GAP / 2;   // start half a gap past 12 o'clock so the top of the ring falls between arcs
+    groups.forEach(g => {
+      g.forEach(a => {
+        const ang = Math.PI / 2 - (2 * Math.PI * (s + 0.5)) / slots;
+        a.pos = onRing(ang);
+        a.left = Math.cos(ang) < -0.05;   // labels on the left half point outward
+        s += 1;
+      });
+      s += GAP;
+    });
+    actors.filter(a => a.location).forEach(a => { a.pos = [a.location.lon, a.location.lat]; a.left = false; });
+    edges.features = actors.map(a => ({ type: "Feature",
+      properties: { id: a.id, type: a.type, drole: MODES.deploy.key(a), legal: LEGAL.has(a.relationship) },
+      geometry: { type: "LineString", coordinates: [a.pos, FOCUS] } }));
+  }
+  placeActors();
 
   const map = new maplibregl.Map({
     container: "map",
@@ -208,10 +236,19 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
   map.addControl(new maplibregl.NavigationControl(), "top-right");
 
   map.on("load", () => {
+    map.addSource("ring", { type: "geojson", data: ring });
+    map.addLayer({ id: "ring", type: "line", source: "ring", paint: { "line-color": "#fff", "line-width": 1, "line-opacity": 0.35 } });
+    // each actor line sits on a dark casing 2px wider so it reads on satellite imagery;
+    // the dashed casing's pattern is rescaled to its width so its dashes line up with the line's
     map.addSource("edges", { type: "geojson", data: edges });
-    map.addLayer({ id: "edges-legal", type: "line", source: "edges", filter: ["==", ["get", "legal"], true],
+    const legal = v => ["==", ["get", "legal"], v];
+    map.addLayer({ id: "edges-legal-casing", type: "line", source: "edges", filter: legal(true),
+      paint: { "line-color": CASING, "line-width": 4.5, "line-opacity": 0.6 } });
+    map.addLayer({ id: "edges-legal", type: "line", source: "edges", filter: legal(true),
       paint: { "line-color": edgeColor(), "line-width": 2.5, "line-opacity": 0.9 } });
-    map.addLayer({ id: "edges-soft", type: "line", source: "edges", filter: ["==", ["get", "legal"], false],
+    map.addLayer({ id: "edges-soft-casing", type: "line", source: "edges", filter: legal(false),
+      paint: { "line-color": CASING, "line-width": 3.6, "line-opacity": 0.6, "line-dasharray": [3.2 / 3.6, 3.2 / 3.6] } });
+    map.addLayer({ id: "edges-soft", type: "line", source: "edges", filter: legal(false),
       paint: { "line-color": edgeColor(), "line-width": 1.6, "line-opacity": 0.75, "line-dasharray": [2, 2] } });
     apply();
     if (river) {
@@ -222,7 +259,7 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
     if (monitors) {
       map.addSource("monitors", { type: "geojson", data: monitors });
       map.addLayer({ id: "monitors", type: "circle", source: "monitors",
-        paint: { "circle-radius": 4, "circle-color": "#40e0ff", "circle-stroke-color": "#06262c", "circle-stroke-width": 1.5 } });
+        paint: { "circle-radius": 4.5, "circle-color": "#fff", "circle-stroke-color": "#40e0ff", "circle-stroke-width": 2 } });
       map.on("click", "monitors", e => {
         const p = e.features[0].properties;
         new maplibregl.Popup().setLngLat(e.lngLat)
@@ -232,11 +269,19 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
       map.on("mouseenter", "monitors", () => map.getCanvas().style.cursor = "pointer");
       map.on("mouseleave", "monitors", () => map.getCanvas().style.cursor = "");
     }
-    const wide = innerWidth > 700;
-    map.flyTo({ center, zoom: 11.4, duration: 4500, essential: true,
-      padding: wide ? { left: 360, top: 20, right: 20, bottom: 20 } : { left: 10, top: 10, right: 10, bottom: innerHeight * 0.48 } });
+    // open on the whole ring, leaving room for the side panel and for labels pointing out of the ring
+    const wide = innerWidth > 700, lab = wide ? 220 : 40;
+    map.fitBounds([[center[0] - R / k, center[1] - R], [center[0] + R / k, center[1] + R]], { duration: 4500, essential: true,
+      padding: wide ? { left: 360 + lab, top: 40, right: 20 + lab, bottom: 40 } : { left: 10 + lab, top: 30, right: 10 + lab, bottom: innerHeight * 0.48 } });
   });
 
+  const focusEl = document.createElement("div");
+  focusEl.className = "focus";
+  focusEl.innerHTML = `<span class="ring"></span><span class="lab">Deployment site</span>`;
+  new maplibregl.Marker({ element: focusEl, anchor: "center" }).setLngLat(FOCUS).addTo(map);
+
+  const CASING = "#0b1215";
+  const EDGE_LAYERS = [["edges-legal-casing", true], ["edges-legal", true], ["edges-soft-casing", false], ["edges-soft", false]];
   function edgeColor() {
     const M = MODES[mode];
     return ["match", ["get", M.prop], ...M.order.flatMap(t => [t, M.color(t)]), "#999"];
@@ -249,15 +294,23 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
     const r = DROLES[MODES.deploy.key(a)];
     return (r.shape === "dot" ? `<span class="dot none" style="background:${r.color}"></span>` : shapeSVG(r.shape, r.color, 18, "shape")) + lab;
   }
-  const markers = actors.map(a => {
+  actors.forEach(a => {
     const el = document.createElement("button");
-    el.className = "actor" + (a.left ? " left" : "");
+    el.className = "actor";
     el.setAttribute("aria-label", a.name);
     el.innerHTML = markHTML(a);
     el.addEventListener("click", ev => { ev.stopPropagation(); select(a); });
     a.el = el;
-    return new maplibregl.Marker({ element: el, anchor: a.left ? "right" : "left" }).setLngLat(a.pos).addTo(map);
   });
+  // a marker's anchor side is fixed once created, so re-placing an actor means a new marker
+  function mountMarkers() {
+    actors.forEach(a => {
+      a.marker?.remove();
+      a.el.classList.toggle("left", a.left);
+      a.marker = new maplibregl.Marker({ element: a.el, anchor: a.left ? "right" : "left" }).setLngLat(a.pos).addTo(map);
+    });
+  }
+  mountMarkers();
 
   // legend toggles; each mode keeps its own on/off set
   const onSets = { water: new Set(MODES.water.order), deploy: new Set(MODES.deploy.order) };
@@ -280,10 +333,7 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
     const M = MODES[mode], on = onSets[mode];
     actors.forEach(a => a.el.classList.toggle("dim", !on.has(M.key(a))));
     const f = ["in", ["get", M.prop], ["literal", [...on]]];
-    if (map.getLayer("edges-legal")) {
-      map.setFilter("edges-legal", ["all", ["==", ["get", "legal"], true], f]);
-      map.setFilter("edges-soft", ["all", ["==", ["get", "legal"], false], f]);
-    }
+    if (map.getLayer("edges-legal")) EDGE_LAYERS.forEach(([id, legal]) => map.setFilter(id, ["all", ["==", ["get", "legal"], legal], f]));
   }
   drawTypes();
 
@@ -293,6 +343,8 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
     mode = b.dataset.mode;
     colorBy.querySelectorAll("button").forEach(x => x.setAttribute("aria-checked", x === b));
     actors.forEach(a => { a.el.innerHTML = markHTML(a); });
+    placeActors(); mountMarkers();   // the ring regroups into arcs for the new mode
+    if (map.getSource("edges")) map.getSource("edges").setData(edges);
     if (map.getLayer("edges-legal")) ["edges-legal", "edges-soft"].forEach(id => map.setPaintProperty(id, "line-color", edgeColor()));
     apply(); drawTypes();
   });
