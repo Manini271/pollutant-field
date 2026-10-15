@@ -27,7 +27,18 @@ html, body { height: 100%; margin: 0; background: var(--page); font-family: var(
 .panel { position: absolute; top: 16px; left: 16px; bottom: 16px; width: 320px; background: var(--panel);
   backdrop-filter: blur(10px); border: 1px solid var(--panel-edge); border-radius: 14px; padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
 h1 { font-size: 22px; font-weight: 700; line-height: 1.1; margin: 0; }
-.sub { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+.search { margin-top: 8px; }
+.search input { width: 100%; font: inherit; font-size: 13px; color: var(--ink); background: var(--panel); border: 1px solid var(--rule);
+  border-radius: 8px; padding: 7px 10px; }
+.search input::placeholder { color: var(--muted); }
+.search input:focus-visible { outline: 2px solid var(--partner); outline-offset: 1px; }
+.site-list { list-style: none; margin: 4px 0 0; padding: 3px; border: 1px solid var(--rule); border-radius: 8px; font-size: 13px; }
+.site-list li { padding: 6px 8px; border-radius: 5px; cursor: pointer; }
+.site-list li[aria-selected="true"] { background: var(--rule); }
+.search-msg { margin: 6px 0 0; font-size: 12px; line-height: 1.45; color: var(--ink); overflow-wrap: anywhere; }
+.search-msg code { font-size: 11.5px; }
+.credit { margin: 4px 0 0; font-size: 11px; color: var(--muted); }
+.credit a { color: inherit; }
 h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; text-transform: none; }
 .types { display: grid; gap: 4px; }
 .type { display: flex; align-items: center; gap: 8px; font-size: 13px; background: none; border: 0; padding: 3px 0;
@@ -91,7 +102,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--partner); outli
   <div>
     <a class="nav" href="../index.html">← Pollutant Field</a>
     <h1>Stakeholder Map</h1>
-    <p class="sub" id="wbName">Loading…</p>
+    <div class="search">
+      <input id="siteSearch" type="search" role="combobox" aria-label="Search sites" aria-autocomplete="list"
+        aria-expanded="false" aria-controls="siteList" autocomplete="off" spellcheck="false" placeholder="Loading…">
+      <ul id="siteList" class="site-list" role="listbox" aria-label="Prepared sites" hidden></ul>
+      <p id="searchMsg" class="search-msg" aria-live="polite" hidden></p>
+      <p class="credit">Place search by <a href="https://nominatim.openstreetmap.org/" target="_blank" rel="noopener">OpenStreetMap Nominatim</a></p>
+    </div>
   </div>
   <section><h2>Color by</h2>
     <div class="seg" id="colorBy" role="radiogroup" aria-label="Color by">
@@ -116,8 +133,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--partner); outli
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
 <script>
 (async () => {
-  const SLUG = "providence";
-  const FOCUS = [-71.4118, 41.8273];   // WaterFire, Waterplace Park: the deployment site
   const TYPES = {
     regulator: "Regulators", permit_holder: "Permit holders", partner: "Partners & hosts",
     innovator: "Innovators", advocate: "Advocates", research: "Research", funder: "Funders",
@@ -167,53 +182,183 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--partner); outli
     return r.shape === "dot" ? `<span class="sw none" style="background:${r.color}"></span>` : shapeSVG(r.shape, r.color, 12);
   }
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-  const status = [];
 
   async function load(path) {
     try { const r = await fetch(path); return r.ok ? await r.json() : null; } catch { return null; }
   }
-  if (location.protocol === "file:") status.push("<b>Open through a local server</b> (python3 -m http.server) so the data files can load.");
 
-  const actorsDoc = await load(`../data/clean/${SLUG}_actors.json`);
-  const river = await load(`../data/clean/${SLUG}_river.geojson`);
-  const monitors = await load(`../data/clean/${SLUG}_monitors.geojson`);
-  const orgsDoc = await load(`../data/clean/${SLUG}_monitor_orgs.json`);
-  const handActors = actorsDoc ? actorsDoc.actors : [];
+  // prepared sites, written by the pipeline; each has a slug, a display name and its deployment site (focus)
+  const SITES = (await load("../data/clean/sites.json"))?.sites || [];
 
-  // organizations found in the monitoring data become actors; their lines run to their own sites
-  const siteAt = new Map((monitors?.features || []).filter(f => f.geometry).map(f => [f.properties.id, f.geometry.coordinates]));
-  const orgActors = (orgsDoc?.orgs || []).map(o => ({
-    id: "wqp-" + o.code, name: o.name || o.code, code: o.code, nameConfirmed: !!o.name, type: "monitor",
-    relationship: "monitors", deployment_role: null, verified: true, source: "Water Quality Portal via USGS NLDI",
-    instrument: `Water quality sampling at ${o.site_count} monitoring site${o.site_count === 1 ? "" : "s"}`,
-    sites: o.site_ids.filter(id => siteAt.has(id))
-  }));
-  const actors = [...handActors, ...orgActors];
-  document.getElementById("wbName").textContent = actorsDoc ? actorsDoc.waterbody : "No actor file found";
-
-  status.push(`<b>${handActors.length}</b> actors, hand-entered (${handActors.filter(a => !a.verified).length} unverified)`);
-  if (orgActors.length) status.push(`<b>${orgActors.length}</b> organizations found automatically from monitoring data`);
-  status.push(river ? `<b>${river.features.length}</b> river segments from USGS` : "River not fetched yet: run <code>python pipeline/fetch_waterbody.py</code>");
-  if (monitors) status.push(`<b>${monitors.features.length}</b> monitoring sites from the Water Quality Portal`);
-
-  // The ring is centered on the river's bounding box and wide enough to enclose the whole river with a
-  // 20% margin. Without a river it falls back to a ring around the deployment site.
-  const verts = [];
-  (river?.features || []).forEach(f => {
-    const g = f.geometry; if (!g) return;
-    const lines = g.type === "MultiLineString" ? g.coordinates : g.type === "LineString" ? [g.coordinates] : [];
-    lines.forEach(l => l.forEach(c => verts.push(c)));
+  // ------------------------------------------------------------ map, built once; each site fills its layers
+  const EMPTY = { type: "FeatureCollection", features: [] };
+  const CASING = "#0b1215";
+  const EDGE_LAYERS = [["edges-legal-casing", true], ["edges-legal", true], ["edges-soft-casing", false], ["edges-soft", false]];
+  const map = new maplibregl.Map({
+    container: "map",
+    style: {
+      version: 8,
+      projection: { type: "globe" },
+      sources: { sat: { type: "raster", tileSize: 256, maxzoom: 19,
+        tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+        attribution: "Imagery © Esri, Maxar, Earthstar Geographics" } },
+      layers: [{ id: "sat", type: "raster", source: "sat" }]
+    },
+    center: [-40, 30], zoom: 1.4, attributionControl: { compact: true }
   });
-  let center = FOCUS;
-  if (verts.length) {
-    const xs = verts.map(c => c[0]), ys = verts.map(c => c[1]);
-    center = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+  const mapReady = new Promise(resolve => map.on("load", () => {
+    map.addSource("ring", { type: "geojson", data: EMPTY });
+    map.addLayer({ id: "ring", type: "line", source: "ring", paint: { "line-color": "#fff", "line-width": 1, "line-opacity": 0.35 } });
+    // each actor line sits on a dark casing 2px wider so it reads on satellite imagery;
+    // the dashed casing's pattern is rescaled to its width so its dashes line up with the line's
+    map.addSource("edges", { type: "geojson", data: EMPTY });
+    const legal = v => ["==", ["get", "legal"], v];
+    map.addLayer({ id: "edges-legal-casing", type: "line", source: "edges", filter: legal(true),
+      paint: { "line-color": CASING, "line-width": 4.5, "line-opacity": 0.6 } });
+    map.addLayer({ id: "edges-legal", type: "line", source: "edges", filter: legal(true),
+      paint: { "line-color": edgeColor(), "line-width": 2.5, "line-opacity": 0.9 } });
+    map.addLayer({ id: "edges-soft-casing", type: "line", source: "edges", filter: legal(false),
+      paint: { "line-color": CASING, "line-width": 3.6, "line-opacity": 0.6, "line-dasharray": [3.2 / 3.6, 3.2 / 3.6] } });
+    map.addLayer({ id: "edges-soft", type: "line", source: "edges", filter: legal(false),
+      paint: { "line-color": edgeColor(), "line-width": 1.6, "line-opacity": 0.75, "line-dasharray": [2, 2] } });
+    map.addSource("river", { type: "geojson", data: EMPTY });
+    map.addLayer({ id: "river-glow", type: "line", source: "river", paint: { "line-color": "#40e0ff", "line-width": 7, "line-opacity": 0.25, "line-blur": 3 } });
+    map.addLayer({ id: "river", type: "line", source: "river", paint: { "line-color": "#40e0ff", "line-width": 2.5 } });
+    map.addSource("monitors", { type: "geojson", data: EMPTY });
+    map.addLayer({ id: "monitors", type: "circle", source: "monitors",
+      paint: { "circle-radius": 4.5, "circle-color": "#fff", "circle-stroke-color": "#40e0ff", "circle-stroke-width": 2 } });
+    map.on("click", "monitors", e => {
+      const p = e.features[0].properties;
+      new maplibregl.Popup().setLngLat(e.lngLat)
+        .setHTML(`<b>${esc(p.name)}</b><br>${esc(p.id)}<br><small>${esc(p.source)}</small>${p.url ? `<br><a href="${esc(p.url)}" target="_blank" rel="noopener">Open site record</a>` : ""}`)
+        .addTo(map);
+    });
+    map.on("mouseenter", "monitors", () => map.getCanvas().style.cursor = "pointer");
+    map.on("mouseleave", "monitors", () => map.getCanvas().style.cursor = "");
+    resolve();
+  }));
+
+  const wide = () => innerWidth > 700;
+  // room for the side panel, plus room for labels pointing out of the ring
+  const viewPadding = (lab = 0) => wide()
+    ? { left: 360 + lab, top: 40, right: 20 + lab, bottom: 40 }
+    : { left: 10 + lab, top: 30, right: 10 + lab, bottom: innerHeight * 0.48 };
+
+  // ------------------------------------------------------------ the loaded site
+  let site = null;          // { slug, name, focus } from sites.json
+  let actors = [];
+  let siteAt = new Map();   // monitoring site ID -> [lon, lat]
+  let ringGeo = null;       // { center, k, R }
+  let focusMarker = null;
+  const edges = { type: "FeatureCollection", features: [] };
+  let ringNeed = 0;
+  let loadSeq = 0;
+  const statusEl = document.getElementById("status");
+  const card = document.getElementById("card");
+
+  async function loadSite(slug) {
+    const seq = ++loadSeq;
+    const next = SITES.find(s => s.slug === slug);
+    const base = `../data/clean/${next.slug}`;
+    const [actorsDoc, river, monitors, orgsDoc] = await Promise.all(
+      ["_actors.json", "_river.geojson", "_monitors.geojson", "_monitor_orgs.json"].map(f => load(base + f)));
+    if (seq !== loadSeq) return;   // a newer choice arrived while this one loaded
+
+    // clear the previous site
+    actors.forEach(a => a.marker?.remove());
+    focusMarker?.remove();
+    card.hidden = true;
+    site = next;
+    history.replaceState(null, "", `?site=${encodeURIComponent(site.slug)}`);
+    searchInput.placeholder = site.name;
+    searchInput.title = `Current site: ${site.name}`;   // the box is narrower than long names
+
+    const handActors = actorsDoc ? actorsDoc.actors : [];
+    // organizations found in the monitoring data become actors; their lines run to their own sites
+    siteAt = new Map((monitors?.features || []).filter(f => f.geometry).map(f => [f.properties.id, f.geometry.coordinates]));
+    const orgActors = (orgsDoc?.orgs || []).map(o => ({
+      id: "wqp-" + o.code, name: o.name || o.code, code: o.code, nameConfirmed: !!o.name, type: "monitor",
+      relationship: "monitors", deployment_role: null, verified: true, source: "Water Quality Portal via USGS NLDI",
+      instrument: `Water quality sampling at ${o.site_count} monitoring site${o.site_count === 1 ? "" : "s"}`,
+      sites: o.site_ids.filter(id => siteAt.has(id))
+    }));
+    actors = [...handActors, ...orgActors];
+
+    const status = [];
+    if (location.protocol === "file:") status.push("<b>Open through a local server</b> (python3 -m http.server) so the data files can load.");
+    status.push(actorsDoc
+      ? `<b>${handActors.length}</b> actors, hand-entered (${handActors.filter(a => !a.verified).length} unverified)`
+      : `No actor file found: add <code>data/clean/${esc(site.slug)}_actors.json</code>`);
+    if (orgActors.length) status.push(`<b>${orgActors.length}</b> organizations found automatically from monitoring data`);
+    status.push(river ? `<b>${river.features.length}</b> river segments from USGS` : "River not fetched yet: run <code>python pipeline/fetch_waterbody.py</code>");
+    if (monitors) status.push(`<b>${monitors.features.length}</b> monitoring sites from the Water Quality Portal`);
+    statusEl.innerHTML = status.join("<br>");
+
+    // The ring is centered on the river's bounding box and wide enough to enclose the whole river with a
+    // 20% margin. Without a river it falls back to a ring around the deployment site.
+    const verts = [];
+    (river?.features || []).forEach(f => {
+      const g = f.geometry; if (!g) return;
+      const lines = g.type === "MultiLineString" ? g.coordinates : g.type === "LineString" ? [g.coordinates] : [];
+      lines.forEach(l => l.forEach(c => verts.push(c)));
+    });
+    let center = site.focus;
+    if (verts.length) {
+      const xs = verts.map(c => c[0]), ys = verts.map(c => c[1]);
+      center = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+    }
+    const k = Math.cos(center[1] * Math.PI / 180);   // a degree of longitude is shorter at this latitude
+    const R = verts.length ? 1.2 * Math.max(...verts.map(c => Math.hypot((c[0] - center[0]) * k, c[1] - center[1]))) : 0.045;
+    ringGeo = { center, k, R };
+    const ring = { type: "Feature", properties: {},
+      geometry: { type: "LineString", coordinates: Array.from({ length: 129 }, (_, i) => onRing((2 * Math.PI * i) / 128)) } };
+
+    actors.forEach(a => {
+      const el = document.createElement("button");
+      el.className = "actor";
+      el.setAttribute("aria-label", a.name);
+      el.innerHTML = markHTML(a);
+      el.addEventListener("click", ev => { ev.stopPropagation(); select(a); });
+      a.el = el;
+    });
+    // measure each label's wrapped height off screen, before any marker is placed
+    const measure = document.createElement("div");
+    measure.style.cssText = "position:absolute;visibility:hidden;left:-9999px;top:0";
+    document.body.appendChild(measure);
+    actors.forEach(a => { measure.appendChild(a.el); a.labelH = a.el.offsetHeight; });
+    measure.remove();
+    placeActors();
+    mountMarkers();
+
+    const focusEl = document.createElement("div");
+    focusEl.className = "focus";
+    focusEl.innerHTML = `<span class="ring"></span><span class="lab">Deployment site</span>`;
+    focusMarker = new maplibregl.Marker({ element: focusEl, anchor: "center" }).setLngLat(site.focus).addTo(map);
+    drawTypes();
+
+    await mapReady;
+    if (seq !== loadSeq) return;
+    map.getSource("ring").setData(ring);
+    map.getSource("edges").setData(edges);
+    map.getSource("river").setData(river || EMPTY);
+    map.getSource("monitors").setData(monitors || EMPTY);
+    ["edges-legal", "edges-soft"].forEach(id => map.setPaintProperty(id, "line-color", edgeColor()));
+    apply();
+    // open on the whole ring, but never so far out that ring labels overlap;
+    // on a small window part of the ring is then off screen.
+    // (Computed directly: maplibre's cameraForBounds fails on the globe once the map has flown in.)
+    const padding = viewPadding(wide() ? 220 : 40), box = map.getContainer();
+    const fitPx = Math.min(box.clientWidth - padding.left - padding.right, box.clientHeight - padding.top - padding.bottom) / 2;
+    const zoomFor = px => Math.log2((px * 40075016.686 * k) / (512 * R * 111320));   // zoom at which the ring radius is px
+    map.flyTo({ center, padding, zoom: zoomFor(Math.max(fitPx, ringNeed)), duration: 4500, essential: true });
   }
-  const k = Math.cos(center[1] * Math.PI / 180);   // a degree of longitude is shorter at this latitude
-  const R = verts.length ? 1.2 * Math.max(...verts.map(c => Math.hypot((c[0] - center[0]) * k, c[1] - center[1]))) : 0.045;
-  const onRing = ang => [center[0] + (R / k) * Math.cos(ang), center[1] + R * Math.sin(ang)];
-  const ring = { type: "Feature", properties: {},
-    geometry: { type: "LineString", coordinates: Array.from({ length: 129 }, (_, i) => onRing((2 * Math.PI * i) / 128)) } };
+
+  function onRing(ang) {
+    const { center, k, R } = ringGeo;
+    return [center[0] + (R / k) * Math.cos(ang), center[1] + R * Math.sin(ang)];
+  }
 
   // Actors without a location sit on the ring in arcs, one arc per category of the active color-by
   // mode, with a gap between arcs. Their lines run to the deployment site.
@@ -221,8 +366,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--partner); outli
   // getting vertical room for its own label (a wrapped three-line name gets more than a short one).
   // Equal angles would crowd labels near the top and bottom of the ring, where neighbors sit almost level.
   // ringNeed is the ring radius in screen pixels at which no two labels overlap.
-  const edges = { type: "FeatureCollection", features: [] };
-  let ringNeed = 0;
   function placeActors() {
     const M = MODES[mode], GAP = 18;   // px between arcs
     const room = a => a.labelH + 6;
@@ -241,90 +384,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--partner); outli
     });
     ringNeed = total / 4;   // each side spans 2R and holds half the total
     actors.filter(a => a.location).forEach(a => { a.pos = [a.location.lon, a.location.lat]; a.left = false; });
-    edges.features = actors.flatMap(a => (a.sites ? a.sites.map(id => siteAt.get(id)) : [FOCUS]).map(to => ({ type: "Feature",
+    edges.features = actors.flatMap(a => (a.sites ? a.sites.map(id => siteAt.get(id)) : [site.focus]).map(to => ({ type: "Feature",
       properties: { id: a.id, type: a.type, drole: MODES.deploy.key(a), legal: LEGAL.has(a.relationship) },
       geometry: { type: "LineString", coordinates: [a.pos, to] } })));
   }
-  actors.forEach(a => {
-    const el = document.createElement("button");
-    el.className = "actor";
-    el.setAttribute("aria-label", a.name);
-    el.innerHTML = markHTML(a);
-    el.addEventListener("click", ev => { ev.stopPropagation(); select(a); });
-    a.el = el;
-  });
-  // measure each label's wrapped height off screen, before any marker is placed
-  const measure = document.createElement("div");
-  measure.style.cssText = "position:absolute;visibility:hidden;left:-9999px;top:0";
-  document.body.appendChild(measure);
-  actors.forEach(a => { measure.appendChild(a.el); a.labelH = a.el.offsetHeight; });
-  measure.remove();
-  placeActors();
 
-  const map = new maplibregl.Map({
-    container: "map",
-    style: {
-      version: 8,
-      projection: { type: "globe" },
-      sources: { sat: { type: "raster", tileSize: 256, maxzoom: 19,
-        tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-        attribution: "Imagery © Esri, Maxar, Earthstar Geographics" } },
-      layers: [{ id: "sat", type: "raster", source: "sat" }]
-    },
-    center: [-40, 30], zoom: 1.4, attributionControl: { compact: true }
-  });
-  map.addControl(new maplibregl.NavigationControl(), "top-right");
-
-  map.on("load", () => {
-    map.addSource("ring", { type: "geojson", data: ring });
-    map.addLayer({ id: "ring", type: "line", source: "ring", paint: { "line-color": "#fff", "line-width": 1, "line-opacity": 0.35 } });
-    // each actor line sits on a dark casing 2px wider so it reads on satellite imagery;
-    // the dashed casing's pattern is rescaled to its width so its dashes line up with the line's
-    map.addSource("edges", { type: "geojson", data: edges });
-    const legal = v => ["==", ["get", "legal"], v];
-    map.addLayer({ id: "edges-legal-casing", type: "line", source: "edges", filter: legal(true),
-      paint: { "line-color": CASING, "line-width": 4.5, "line-opacity": 0.6 } });
-    map.addLayer({ id: "edges-legal", type: "line", source: "edges", filter: legal(true),
-      paint: { "line-color": edgeColor(), "line-width": 2.5, "line-opacity": 0.9 } });
-    map.addLayer({ id: "edges-soft-casing", type: "line", source: "edges", filter: legal(false),
-      paint: { "line-color": CASING, "line-width": 3.6, "line-opacity": 0.6, "line-dasharray": [3.2 / 3.6, 3.2 / 3.6] } });
-    map.addLayer({ id: "edges-soft", type: "line", source: "edges", filter: legal(false),
-      paint: { "line-color": edgeColor(), "line-width": 1.6, "line-opacity": 0.75, "line-dasharray": [2, 2] } });
-    apply();
-    if (river) {
-      map.addSource("river", { type: "geojson", data: river });
-      map.addLayer({ id: "river-glow", type: "line", source: "river", paint: { "line-color": "#40e0ff", "line-width": 7, "line-opacity": 0.25, "line-blur": 3 } });
-      map.addLayer({ id: "river", type: "line", source: "river", paint: { "line-color": "#40e0ff", "line-width": 2.5 } });
-    }
-    if (monitors) {
-      map.addSource("monitors", { type: "geojson", data: monitors });
-      map.addLayer({ id: "monitors", type: "circle", source: "monitors",
-        paint: { "circle-radius": 4.5, "circle-color": "#fff", "circle-stroke-color": "#40e0ff", "circle-stroke-width": 2 } });
-      map.on("click", "monitors", e => {
-        const p = e.features[0].properties;
-        new maplibregl.Popup().setLngLat(e.lngLat)
-          .setHTML(`<b>${esc(p.name)}</b><br>${esc(p.id)}<br><small>${esc(p.source)}</small>${p.url ? `<br><a href="${esc(p.url)}" target="_blank" rel="noopener">Open site record</a>` : ""}`)
-          .addTo(map);
-      });
-      map.on("mouseenter", "monitors", () => map.getCanvas().style.cursor = "pointer");
-      map.on("mouseleave", "monitors", () => map.getCanvas().style.cursor = "");
-    }
-    // open on the whole ring, leaving room for the side panel and for labels pointing out of the ring,
-    // but never so far out that ring labels overlap; on a small window part of the ring is then off screen
-    const wide = innerWidth > 700, lab = wide ? 220 : 40;
-    const padding = wide ? { left: 360 + lab, top: 40, right: 20 + lab, bottom: 40 } : { left: 10 + lab, top: 30, right: 10 + lab, bottom: innerHeight * 0.48 };
-    const fit = map.cameraForBounds([[center[0] - R / k, center[1] - R], [center[0] + R / k, center[1] + R]], { padding });
-    const zoomFor = px => Math.log2((px * 40075016.686 * k) / (512 * R * 111320));   // zoom at which the ring radius is px
-    map.flyTo({ center, padding, zoom: Math.max(fit ? fit.zoom : 0, zoomFor(ringNeed)), duration: 4500, essential: true });
-  });
-
-  const focusEl = document.createElement("div");
-  focusEl.className = "focus";
-  focusEl.innerHTML = `<span class="ring"></span><span class="lab">Deployment site</span>`;
-  new maplibregl.Marker({ element: focusEl, anchor: "center" }).setLngLat(FOCUS).addTo(map);
-
-  const CASING = "#0b1215";
-  const EDGE_LAYERS = [["edges-legal-casing", true], ["edges-legal", true], ["edges-soft-casing", false], ["edges-soft", false]];
   function edgeColor() {
     const M = MODES[mode];
     return ["match", ["get", M.prop], ...M.order.flatMap(t => [t, M.color(t)]), "#999"];
@@ -345,7 +409,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--partner); outli
       a.marker = new maplibregl.Marker({ element: a.el, anchor: a.left ? "right" : "left" }).setLngLat(a.pos).addTo(map);
     });
   }
-  mountMarkers();
 
   // legend toggles; each mode keeps its own on/off set
   const onSets = { water: new Set(MODES.water.order), deploy: new Set(MODES.deploy.order) };
@@ -370,13 +433,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--partner); outli
     const f = ["in", ["get", M.prop], ["literal", [...on]]];
     if (map.getLayer("edges-legal")) EDGE_LAYERS.forEach(([id, legal]) => map.setFilter(id, ["all", ["==", ["get", "legal"], legal], f]));
   }
-  drawTypes();
 
   const colorBy = document.getElementById("colorBy");
   colorBy.addEventListener("click", e => {
     const b = e.target.closest("button[data-mode]"); if (!b || b.dataset.mode === mode) return;
     mode = b.dataset.mode;
     colorBy.querySelectorAll("button").forEach(x => x.setAttribute("aria-checked", x === b));
+    if (!site) return;
     actors.forEach(a => { a.el.innerHTML = markHTML(a); });
     placeActors(); mountMarkers();   // the ring regroups into arcs for the new mode
     if (map.getSource("edges")) map.getSource("edges").setData(edges);
@@ -384,7 +447,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--partner); outli
     apply(); drawTypes();
   });
 
-  const card = document.getElementById("card");
   function select(a) {
     actors.forEach(x => x.el.classList.toggle("on", x === a));
     card.hidden = false;
@@ -397,12 +459,94 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--partner); outli
         <dt>Relationship</dt><dd>${esc(a.relationship.replace(/_/g, " "))}</dd>
         <dt>How</dt><dd>${esc(a.instrument)}</dd>
         ${a.sites ? `<dt>Sites</dt><dd>${a.sites.map(esc).join(", ")}</dd>` : ""}
-        ${a.code && !a.nameConfirmed ? `<dt>Name</dt><dd>Not confirmed yet. Only the Water Quality Portal code ${esc(a.code)} is known; add the name in data/clean/${SLUG}_monitor_orgs.json.</dd>` : ""}
+        ${a.code && !a.nameConfirmed ? `<dt>Name</dt><dd>Not confirmed yet. Only the Water Quality Portal code ${esc(a.code)} is known; add the name in data/clean/${esc(site.slug)}_monitor_orgs.json.</dd>` : ""}
         <dt>Source</dt><dd>${esc(a.source)}</dd>
       </dl>`;
   }
 
-  document.getElementById("status").innerHTML = status.join("<br>");
+  // ------------------------------------------------------------ site search
+  // Typing filters the prepared sites only. Enter with no prepared match asks Nominatim, once per Enter
+  // and never while typing, as its usage policy requires.
+  const searchInput = document.getElementById("siteSearch");
+  const list = document.getElementById("siteList"), msg = document.getElementById("searchMsg");
+  let matches = [], active = -1, searching = false, lastLookup = 0;
+
+  function say(html) { msg.innerHTML = html; msg.hidden = !html; }
+  function showMatches() {
+    const q = searchInput.value.trim().toLowerCase();
+    matches = SITES.filter(s => !q || s.name.toLowerCase().includes(q) || s.slug.includes(q));
+    active = matches.length ? 0 : -1;
+    drawMatches();
+  }
+  function drawMatches() {
+    list.innerHTML = matches.map((s, i) =>
+      `<li role="option" id="site-opt-${i}" aria-selected="${i === active}" data-slug="${esc(s.slug)}">${esc(s.name)}</li>`).join("");
+    list.hidden = !matches.length;
+    searchInput.setAttribute("aria-expanded", String(!list.hidden));
+    if (active >= 0) searchInput.setAttribute("aria-activedescendant", `site-opt-${active}`);
+    else searchInput.removeAttribute("aria-activedescendant");
+  }
+  function hideMatches() { matches = []; active = -1; drawMatches(); }
+  function choose(s) { searchInput.value = ""; hideMatches(); say(""); searchInput.blur(); loadSite(s.slug); }
+
+  async function lookUp(q) {
+    if (searching) return;
+    searching = true;
+    const wait = 1000 - (Date.now() - lastLookup);   // at most one request per second
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    lastLookup = Date.now();
+    say("Searching…");
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`);
+      if (!r.ok) throw new Error(String(r.status));
+      const [hit] = await r.json();
+      if (!hit) { say(`No place found for “${esc(q)}”.`); return; }
+      const lon = +(+hit.lon).toFixed(4), lat = +(+hit.lat).toFixed(4);
+      map.flyTo({ center: [lon, lat], zoom: 12, padding: viewPadding(), duration: 3000, essential: true });
+      say(`<b>${esc(hit.display_name)}</b><br>No data for this site yet. To add it, set SLUG, NAME and POINT in ` +
+        `<code>pipeline/fetch_waterbody.py</code>, with POINT = [${lon}, ${lat}], then run the pipeline.`);
+    } catch {
+      say("The place search could not be reached. Check the connection and press Enter again.");
+    } finally {
+      searching = false;
+    }
+  }
+
+  searchInput.addEventListener("input", showMatches);
+  searchInput.addEventListener("focus", showMatches);
+  searchInput.addEventListener("blur", () => setTimeout(hideMatches, 150));
+  searchInput.addEventListener("keydown", e => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (!matches.length) return;
+      e.preventDefault();
+      active = (active + (e.key === "ArrowDown" ? 1 : -1) + matches.length) % matches.length;
+      drawMatches();
+    } else if (e.key === "Escape") {
+      hideMatches();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const q = searchInput.value.trim();
+      if (matches.length) choose(matches[Math.max(active, 0)]);
+      else if (q) { hideMatches(); lookUp(q); }
+    }
+  });
+  list.addEventListener("mousedown", e => e.preventDefault());   // keep focus in the box while clicking a match
+  list.addEventListener("click", e => {
+    const li = e.target.closest("li[data-slug]");
+    if (li) choose(SITES.find(s => s.slug === li.dataset.slug));
+  });
+
+  // ------------------------------------------------------------ start
+  if (!SITES.length) {
+    searchInput.placeholder = "No prepared sites";
+    statusEl.innerHTML = "No prepared sites yet: run <code>python pipeline/fetch_waterbody.py</code>";
+    return;
+  }
+  const asked = new URLSearchParams(location.search).get("site");
+  const first = SITES.find(s => s.slug === asked) || SITES[0];
+  if (asked && first.slug !== asked) say(`No prepared site called “${esc(asked)}”; showing ${esc(first.name)}.`);
+  drawTypes();
+  loadSite(first.slug);
 })();
 </script>
 </body>

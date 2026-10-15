@@ -1,0 +1,12 @@
+{
+  "sites": [
+    {
+      "slug": "providence",
+      "name": "Woonasquatucket + Providence River (WaterFire)",
+      "focus": [
+        -71.4118,
+        41.8273
+      ]
+    }
+  ]
+}

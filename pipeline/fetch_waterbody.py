@@ -9,6 +9,8 @@ Writes:
   data/clean/<slug>_river.geojson   river lines for the map
   data/clean/<slug>_monitors.geojson   Water Quality Portal sampling sites
   data/clean/<slug>_monitor_orgs.json  organizations running those sites (names filled in by hand)
+  data/clean/<slug>_actors.json     hand-entered actors; created empty only if missing
+  data/clean/sites.json             prepared sites for the map's site search
 
 To change the waterbody, edit SLUG, NAME and POINT below.
 """
@@ -101,4 +103,22 @@ dropped = [code for code, name in known.items() if name and code not in by_org]
 if dropped:
     print("Warning: these named organizations have no sites in this run, so their names were not kept: " + ", ".join(dropped))
 print(f"Fill in names by hand in data/clean/{orgs_path.name}")
+
+# 5. make the site loadable: an empty actor list if there is none yet, and an entry in sites.json.
+# The entry's focus follows POINT on every run; its name is set only when the entry is new,
+# so a name edited by hand is kept.
+actors_path = CLEAN / f"{SLUG}_actors.json"
+if not actors_path.exists():
+    actors_path.write_text(json.dumps({"waterbody": NAME, "actors": []}, indent=2) + "\n")
+    print(f"Created an empty {actors_path.name}; add hand-entered actors there")
+sites_path = CLEAN / "sites.json"
+sites = json.loads(sites_path.read_text()) if sites_path.exists() else {"sites": []}
+entry = next((s for s in sites["sites"] if s.get("slug") == SLUG), None)
+if entry is None:
+    sites["sites"].append({"slug": SLUG, "name": NAME, "focus": [POINT[0], POINT[1]]})
+    print(f"sites.json: added {SLUG}")
+else:
+    entry["focus"] = [POINT[0], POINT[1]]
+    print(f"sites.json: updated {SLUG} (name kept)")
+sites_path.write_text(json.dumps(sites, indent=2) + "\n")
 print("Done. Reload pages/stakeholders.html")
