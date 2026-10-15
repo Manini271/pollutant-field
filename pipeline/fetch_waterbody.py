@@ -8,6 +8,7 @@ Writes:
   data/raw/<slug>_*.json            untouched API responses
   data/clean/<slug>_river.geojson   river lines for the map
   data/clean/<slug>_monitors.geojson   Water Quality Portal sampling sites
+  data/clean/<slug>_monitor_orgs.json  organizations running those sites (names filled in by hand)
 
 To change the waterbody, edit SLUG, NAME and POINT below.
 """
@@ -72,4 +73,32 @@ for f in wqp.get("features", []):
                        "url": p.get("uri"), "source": "Water Quality Portal via USGS NLDI"}})
 (CLEAN / f"{SLUG}_monitors.geojson").write_text(json.dumps(monitors))
 print(f"Monitoring sites: {len(monitors['features'])}")
+
+# 4. who runs those sites: group them by organization, the code before the first hyphen in each site ID.
+# Names are not guessed. They stay null until filled in by hand, and hand-filled names survive reruns.
+orgs_path = CLEAN / f"{SLUG}_monitor_orgs.json"
+known = {}
+if orgs_path.exists():
+    try:
+        known = {o["code"]: o.get("name") for o in json.loads(orgs_path.read_text()).get("orgs", [])}
+    except (ValueError, KeyError, TypeError, AttributeError):
+        print(f"Warning: could not read the existing {orgs_path.name}, so no names were carried over")
+by_org = {}
+for f in monitors["features"]:
+    sid = f["properties"]["id"]
+    if sid:
+        by_org.setdefault(sid.split("-", 1)[0], []).append(sid)
+orgs = [{"code": code, "name": known.get(code), "site_count": len(ids), "site_ids": sorted(ids)}
+        for code, ids in sorted(by_org.items(), key=lambda kv: (-len(kv[1]), kv[0]))]
+orgs_path.write_text(json.dumps({"waterbody": NAME, "source": "Water Quality Portal via USGS NLDI",
+                                 "note": "Organization codes come from site IDs. Fill in each name by hand once confirmed; "
+                                         "the pipeline keeps names when it reruns.",
+                                 "orgs": orgs}, indent=2) + "\n")
+print(f"Monitoring organizations: {len(orgs)}")
+for o in orgs:
+    print(f"  {o['code']:<20} {o['site_count']:>2} sites   {o['name'] or 'name not set'}")
+dropped = [code for code, name in known.items() if name and code not in by_org]
+if dropped:
+    print("Warning: these named organizations have no sites in this run, so their names were not kept: " + ", ".join(dropped))
+print(f"Fill in names by hand in data/clean/{orgs_path.name}")
 print("Done. Reload pages/stakeholders.html")

@@ -1,0 +1,74 @@
+{
+  "waterbody": "Woonasquatucket + Providence River (WaterFire)",
+  "source": "Water Quality Portal via USGS NLDI",
+  "note": "Organization codes come from site IDs. Fill in each name by hand once confirmed; the pipeline keeps names when it reruns.",
+  "orgs": [
+    {
+      "code": "1111REG1",
+      "name": "US EPA Region 1 (water sampling)",
+      "site_count": 7,
+      "site_ids": [
+        "1111REG1-DAM001",
+        "1111REG1-DAM002",
+        "1111REG1-DAM003",
+        "1111REG1-DAM004",
+        "1111REG1-DAM005",
+        "1111REG1-DAM006",
+        "1111REG1-DAM007"
+      ]
+    },
+    {
+      "code": "USGS",
+      "name": "US Geological Survey",
+      "site_count": 6,
+      "site_ids": [
+        "USGS-01114450",
+        "USGS-01114500",
+        "USGS-01114800",
+        "USGS-414817071263401",
+        "USGS-415332071303400",
+        "USGS-415428071313700"
+      ]
+    },
+    {
+      "code": "NARS_WQX",
+      "name": "EPA National Aquatic Resource Surveys",
+      "site_count": 4,
+      "site_ids": [
+        "NARS_WQX-FW08RI017",
+        "NARS_WQX-NRS_RI-10033",
+        "NARS_WQX-NRS_RI-10098",
+        "NARS_WQX-RIS9-0913"
+      ]
+    },
+    {
+      "code": "HORSLEYWITTEN_WQX",
+      "name": null,
+      "site_count": 3,
+      "site_ids": [
+        "HORSLEYWITTEN_WQX-HW-1",
+        "HORSLEYWITTEN_WQX-HW-2",
+        "HORSLEYWITTEN_WQX-HW-PR"
+      ]
+    },
+    {
+      "code": "NALMS",
+      "name": null,
+      "site_count": 3,
+      "site_ids": [
+        "NALMS-F1218813",
+        "NALMS-F1218815",
+        "NALMS-F1219451"
+      ]
+    },
+    {
+      "code": "21RIBCH",
+      "name": "RI Department of Health (beach monitoring)",
+      "site_count": 2,
+      "site_ids": [
+        "21RIBCH-RI180657-01",
+        "21RIBCH-RI980715-01"
+      ]
+    }
+  ]
+}

@@ -9,7 +9,7 @@
 :root {
   --page: #ffffff; --panel: #ffffff; --panel-edge: rgba(19, 38, 45, 0.14); --ink: #13262d; --muted: #5b6e73; --rule: rgba(19, 38, 45, 0.14);
   --regulator: #c98a0e; --permit_holder: #d23b40; --partner: #2d84c9; --innovator: #3f9a4c;
-  --advocate: #8b56c2; --research: #1f9a92; --funder: #6b6b6b;
+  --advocate: #8b56c2; --research: #1f9a92; --funder: #6b6b6b; --monitor: #d6609b;
   --font: "Helvetica Neue", Helvetica, Arial, sans-serif;
   color-scheme: light; box-sizing: border-box;
 }
@@ -17,7 +17,7 @@
   :root {
     --page: #0b1215; --panel: rgba(14, 24, 28, 0.88); --panel-edge: transparent; --ink: #e7efed; --muted: #9db0b3; --rule: rgba(231, 239, 237, 0.14);
     --regulator: #f2b134; --permit_holder: #ff6b6f; --partner: #5ec4ff; --innovator: #7ee08a;
-    --advocate: #c99bff; --research: #4dd8cf; --funder: #d8d8d8; color-scheme: dark;
+    --advocate: #c99bff; --research: #4dd8cf; --funder: #d8d8d8; --monitor: #f08cc0; color-scheme: dark;
   }
 }
 *, *::before, *::after { box-sizing: inherit; }
@@ -56,9 +56,10 @@ h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; te
 
 .card { border-top: 1px solid var(--rule); padding-top: 12px; font-size: 13px; line-height: 1.45; }
 .card h3 { font-size: 17px; font-weight: 700; margin: 2px 0 6px; line-height: 1.2; }
-.card dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0; }
-.card dt { color: var(--muted); }
-.card dd { margin: 0; }
+.card { min-width: 0; overflow-wrap: anywhere; }
+.card dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; }
+.card dt { color: var(--muted); overflow-wrap: normal; }
+.card dd { margin: 0; min-width: 0; }
 .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; }
 .unverified { color: var(--permit_holder); }
 .verified { color: var(--innovator); }
@@ -99,7 +100,7 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
   <section class="lines">
     <h2>Lines</h2>
     <div><span></span>Legal authority over the water (regulates, permits, discharges)</div>
-    <div><span class="dash"></span>Working relationship (hosts, funds, collaborates, researches, advocates)</div>
+    <div><span class="dash"></span>Working relationship (hosts, funds, collaborates, researches, advocates, monitors)</div>
     <div><span style="border-color:#40e0ff"></span>River, from USGS data</div>
     <div><i class="msw"></i>Monitoring sites (Water Quality Portal)</div>
     <div><i class="fsw"></i>Deployment site</div>
@@ -116,7 +117,8 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
   const FOCUS = [-71.4118, 41.8273];   // WaterFire, Waterplace Park: the deployment site
   const TYPES = {
     regulator: "Regulators", permit_holder: "Permit holders", partner: "Partners & hosts",
-    innovator: "Innovators", advocate: "Advocates", research: "Research", funder: "Funders"
+    innovator: "Innovators", advocate: "Advocates", research: "Research", funder: "Funders",
+    monitor: "Monitoring organizations"
   };
   const DROLES = {
     node_lead: { label: "Node lead", shape: "square", color: "#e040e0" },
@@ -172,10 +174,22 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
   const actorsDoc = await load(`../data/clean/${SLUG}_actors.json`);
   const river = await load(`../data/clean/${SLUG}_river.geojson`);
   const monitors = await load(`../data/clean/${SLUG}_monitors.geojson`);
-  const actors = actorsDoc ? actorsDoc.actors : [];
+  const orgsDoc = await load(`../data/clean/${SLUG}_monitor_orgs.json`);
+  const handActors = actorsDoc ? actorsDoc.actors : [];
+
+  // organizations found in the monitoring data become actors; their lines run to their own sites
+  const siteAt = new Map((monitors?.features || []).filter(f => f.geometry).map(f => [f.properties.id, f.geometry.coordinates]));
+  const orgActors = (orgsDoc?.orgs || []).map(o => ({
+    id: "wqp-" + o.code, name: o.name || o.code, code: o.code, nameConfirmed: !!o.name, type: "monitor",
+    relationship: "monitors", deployment_role: null, verified: true, source: "Water Quality Portal via USGS NLDI",
+    instrument: `Water quality sampling at ${o.site_count} monitoring site${o.site_count === 1 ? "" : "s"}`,
+    sites: o.site_ids.filter(id => siteAt.has(id))
+  }));
+  const actors = [...handActors, ...orgActors];
   document.getElementById("wbName").textContent = actorsDoc ? actorsDoc.waterbody : "No actor file found";
 
-  status.push(`<b>${actors.length}</b> actors, hand-entered (${actors.filter(a => !a.verified).length} unverified)`);
+  status.push(`<b>${handActors.length}</b> actors, hand-entered (${handActors.filter(a => !a.verified).length} unverified)`);
+  if (orgActors.length) status.push(`<b>${orgActors.length}</b> organizations found automatically from monitoring data`);
   status.push(river ? `<b>${river.features.length}</b> river segments from USGS` : "River not fetched yet: run <code>python pipeline/fetch_waterbody.py</code>");
   if (monitors) status.push(`<b>${monitors.features.length}</b> monitoring sites from the Water Quality Portal`);
 
@@ -224,9 +238,9 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
     });
     ringNeed = total / 4;   // each side spans 2R and holds half the total
     actors.filter(a => a.location).forEach(a => { a.pos = [a.location.lon, a.location.lat]; a.left = false; });
-    edges.features = actors.map(a => ({ type: "Feature",
+    edges.features = actors.flatMap(a => (a.sites ? a.sites.map(id => siteAt.get(id)) : [FOCUS]).map(to => ({ type: "Feature",
       properties: { id: a.id, type: a.type, drole: MODES.deploy.key(a), legal: LEGAL.has(a.relationship) },
-      geometry: { type: "LineString", coordinates: [a.pos, FOCUS] } }));
+      geometry: { type: "LineString", coordinates: [a.pos, to] } })));
   }
   actors.forEach(a => {
     const el = document.createElement("button");
@@ -379,6 +393,8 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
         <dt>Deployment role</dt><dd>${a.deployment_role ? `${swatch("deploy", a.deployment_role)} ${esc(DROLES[a.deployment_role].label)}` : "None"}</dd>
         <dt>Relationship</dt><dd>${esc(a.relationship.replace(/_/g, " "))}</dd>
         <dt>How</dt><dd>${esc(a.instrument)}</dd>
+        ${a.sites ? `<dt>Sites</dt><dd>${a.sites.map(esc).join(", ")}</dd>` : ""}
+        ${a.code && !a.nameConfirmed ? `<dt>Name</dt><dd>Not confirmed yet. Only the Water Quality Portal code ${esc(a.code)} is known; add the name in data/clean/${SLUG}_monitor_orgs.json.</dd>` : ""}
         <dt>Source</dt><dd>${esc(a.source)}</dd>
       </dl>`;
   }
