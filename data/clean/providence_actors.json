@@ -38,8 +38,14 @@
     {"id": "biopod", "name": "BIOPOD Co", "type": "innovator",
      "relationship": "deploys", "instrument": "Floating mycelium biopod modules",
      "source": "BIOPOD deployment records", "verified": true},
-    {"id": "funders", "name": "Deployment funders (Terra Carta Design Lab; Somerson grant)", "type": "funder",
-     "relationship": "funds", "instrument": "Prize and grant funding for BIOPOD",
+    {"id": "ssif", "name": "SSIF (Somerson Sustainability Innovation Fund)", "type": "funder",
+     "relationship": "funds", "instrument": "Funding for BIOPOD",
+     "source": "BIOPOD records", "verified": true},
+    {"id": "terra-carta", "name": "Terra Carta Design Lab", "type": "funder",
+     "relationship": "funds", "instrument": "Funding for BIOPOD",
+     "source": "BIOPOD records", "verified": true},
+    {"id": "smi", "name": "Sustainable Markets Initiative", "type": "funder",
+     "relationship": "funds", "instrument": "Funding for BIOPOD",
      "source": "BIOPOD records", "verified": true}
   ]
 }

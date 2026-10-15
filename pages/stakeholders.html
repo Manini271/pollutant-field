@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Who touches this water? Providence pilot</title>
+<title>Stakeholder Map</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&display=swap" rel="stylesheet">
@@ -41,6 +41,7 @@ h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; te
 .lines { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
 .lines span { display: inline-block; width: 26px; border-top: 2px solid var(--ink); vertical-align: middle; margin-right: 6px; }
 .lines .dash { border-top-style: dashed; opacity: .7; }
+.lines .msw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #fff; border: 2px solid #40e0ff; vertical-align: middle; margin: 0 12px 0 7px; }
 .status { font-size: 12px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 10px; line-height: 1.45; }
 .status b { color: var(--ink); font-weight: 600; }
 
@@ -67,7 +68,7 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
 <div id="map"></div>
 <aside class="panel" aria-label="Actors">
   <div>
-    <h1>Who touches this water?</h1>
+    <h1>Stakeholder Map</h1>
     <p class="sub" id="wbName">Loading…</p>
   </div>
   <section><h2>Actors by role</h2><div class="types" id="types"></div></section>
@@ -76,7 +77,7 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
     <div><span></span>Legal authority over the water (regulates, permits, discharges)</div>
     <div><span class="dash"></span>Working relationship (hosts, funds, researches, advocates)</div>
     <div><span style="border-color:#40e0ff"></span>River, from USGS data</div>
-    <div>● <span style="width:0;border:0;margin:0"></span>Small cyan dots: monitoring sites (Water Quality Portal)</div>
+    <div><i class="msw"></i>Monitoring sites (Water Quality Portal)</div>
   </section>
   <div id="card" class="card" hidden></div>
   <p class="status" id="status"></p>
