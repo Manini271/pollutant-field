@@ -32,8 +32,15 @@ h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; te
 .types { display: grid; gap: 4px; }
 .type { display: flex; align-items: center; gap: 8px; font-size: 13px; background: none; border: 0; padding: 3px 0;
   color: var(--ink); cursor: pointer; text-align: left; font-family: inherit; }
-.type[aria-pressed="false"] { opacity: .35; }
+.type[aria-pressed="false"], .type:disabled { opacity: .35; }
+.type:disabled { cursor: default; }
 .sw { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+.sw.none { width: 7px; height: 7px; margin: 0 2px; }
+.type svg, .card dd svg { flex: none; vertical-align: -1px; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+.seg button { background: none; border: 0; padding: 6px 4px; font: inherit; font-size: 12px; color: var(--ink); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg button[aria-checked="true"] { background: var(--ink); color: var(--panel); }
 .count { margin-left: auto; color: var(--muted); font-size: 12px; }
 .lines { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
 .lines span { display: inline-block; width: 26px; border-top: 2px solid var(--ink); vertical-align: middle; margin-right: 6px; }
@@ -56,7 +63,9 @@ h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; te
 .actor .lab { font-size: 12px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.9); white-space: nowrap; max-width: 210px; overflow: hidden; text-overflow: ellipsis; }
 .actor.left { flex-direction: row-reverse; }
 .actor.dim { opacity: .2; }
-.actor.on .dot { outline: 3px solid #fff; }
+.actor .dot.none { width: 9px; height: 9px; border-width: 1.5px; }
+.actor .shape { flex: none; border-radius: 3px; filter: drop-shadow(0 0 1px rgba(0,0,0,.7)); }
+.actor.on .dot, .actor.on .shape { outline: 3px solid #fff; }
 button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
 @media (max-width: 700px) { .panel { top: auto; height: 46vh; width: auto; right: 16px; } }
 </style>
@@ -68,11 +77,17 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
     <h1>Stakeholder Map</h1>
     <p class="sub" id="wbName">Loading…</p>
   </div>
+  <section><h2>Color by</h2>
+    <div class="seg" id="colorBy" role="radiogroup" aria-label="Color by">
+      <button role="radio" aria-checked="true" data-mode="water">Water role</button>
+      <button role="radio" aria-checked="false" data-mode="deploy">Deployment role</button>
+    </div>
+  </section>
   <section><h2>Actors by role</h2><div class="types" id="types"></div></section>
   <section class="lines">
     <h2>Lines</h2>
     <div><span></span>Legal authority over the water (regulates, permits, discharges)</div>
-    <div><span class="dash"></span>Working relationship (hosts, funds, researches, advocates)</div>
+    <div><span class="dash"></span>Working relationship (hosts, funds, collaborates, researches, advocates)</div>
     <div><span style="border-color:#40e0ff"></span>River, from USGS data</div>
     <div><i class="msw"></i>Monitoring sites (Water Quality Portal)</div>
   </section>
@@ -89,9 +104,49 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
     regulator: "Regulators", permit_holder: "Permit holders", partner: "Partners & hosts",
     innovator: "Innovators", advocate: "Advocates", research: "Research", funder: "Funders"
   };
+  const DROLES = {
+    node_lead: { label: "Node lead", shape: "square", color: "#e040e0" },
+    agro_waste_partner: { label: "Agro waste partner", shape: "circle", color: "#9a7040" },
+    community_volunteers: { label: "Community volunteers", shape: "triangle", color: "#f26a2e" },
+    government_partner: { label: "Government partner", shape: "star", color: "#3b7dd8" },
+    permits: { label: "Permits", shape: "diamond", color: "#6cf05a" },
+    educational_partner: { label: "Educational partner", shape: "hexagon", color: "#7b2ff7" },
+    none: { label: "No deployment role", shape: "dot", color: "#9aa3a5" }
+  };
   const LEGAL = new Set(["regulates", "permits", "oversees", "discharges_into"]);
   const css = getComputedStyle(document.documentElement);
   const color = t => css.getPropertyValue("--" + t).trim() || "#999";
+
+  // two ways to color actors: by their role toward the water, or by their role in the deployment
+  const MODES = {
+    water:  { prop: "type",  key: a => a.type, order: Object.keys(TYPES), label: t => TYPES[t], color: t => color(t) },
+    deploy: { prop: "drole", key: a => a.deployment_role || "none", order: Object.keys(DROLES), label: t => DROLES[t].label, color: t => DROLES[t].color }
+  };
+  let mode = "water";
+
+  function shapeSVG(shape, fill, s, cls = "") {
+    const h = s / 2;
+    // regular polygon around the center; dy nudges top-heavy shapes down so they sit visually centered
+    const poly = (n, radii, dy = 0) => `<polygon points="${Array.from({ length: n }, (_, i) => {
+      const r = radii[i % radii.length], t = -Math.PI / 2 + (2 * Math.PI * i) / n;
+      return `${(h + r * Math.cos(t)).toFixed(2)},${(h + dy + r * Math.sin(t)).toFixed(2)}`;
+    }).join(" ")}"/>`;
+    const body = {
+      circle:   `<circle cx="${h}" cy="${h}" r="${h - 1.5}"/>`,
+      square:   `<rect x="1.5" y="1.5" width="${s - 3}" height="${s - 3}"/>`,
+      triangle: poly(3, [h - 0.5], s * 0.1),
+      diamond:  poly(4, [h - 1]),
+      hexagon:  poly(6, [h - 1]),
+      star:     poly(10, [h - 0.5, (h - 0.5) * 0.45], s * 0.04)
+    }[shape];
+    return `<svg class="${cls}" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" aria-hidden="true"><g fill="${fill}" stroke="#fff" stroke-width="${s > 14 ? 1.5 : 1}" stroke-linejoin="round">${body}</g></svg>`;
+  }
+  // small legend swatch for a category in either mode
+  function swatch(m, t) {
+    if (m === "water") return `<span class="sw" style="background:${color(t)}"></span>`;
+    const r = DROLES[t];
+    return r.shape === "dot" ? `<span class="sw none" style="background:${r.color}"></span>` : shapeSVG(r.shape, r.color, 12);
+  }
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const status = [];
 
@@ -134,7 +189,7 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
   });
   const edges = {
     type: "FeatureCollection",
-    features: actors.map(a => ({ type: "Feature", properties: { id: a.id, type: a.type, legal: LEGAL.has(a.relationship) },
+    features: actors.map(a => ({ type: "Feature", properties: { id: a.id, type: a.type, drole: MODES.deploy.key(a), legal: LEGAL.has(a.relationship) },
       geometry: { type: "LineString", coordinates: [a.pos, a.anchor] } }))
   };
 
@@ -153,12 +208,12 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
   map.addControl(new maplibregl.NavigationControl(), "top-right");
 
   map.on("load", () => {
-    const typeColor = ["match", ["get", "type"], ...order.flatMap(t => [t, color(t)]), "#999"];
     map.addSource("edges", { type: "geojson", data: edges });
     map.addLayer({ id: "edges-legal", type: "line", source: "edges", filter: ["==", ["get", "legal"], true],
-      paint: { "line-color": typeColor, "line-width": 2.5, "line-opacity": 0.9 } });
+      paint: { "line-color": edgeColor(), "line-width": 2.5, "line-opacity": 0.9 } });
     map.addLayer({ id: "edges-soft", type: "line", source: "edges", filter: ["==", ["get", "legal"], false],
-      paint: { "line-color": typeColor, "line-width": 1.6, "line-opacity": 0.75, "line-dasharray": [2, 2] } });
+      paint: { "line-color": edgeColor(), "line-width": 1.6, "line-opacity": 0.75, "line-dasharray": [2, 2] } });
+    apply();
     if (river) {
       map.addSource("river", { type: "geojson", data: river });
       map.addLayer({ id: "river-glow", type: "line", source: "river", paint: { "line-color": "#40e0ff", "line-width": 7, "line-opacity": 0.25, "line-blur": 3 } });
@@ -182,40 +237,65 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
       padding: wide ? { left: 360, top: 20, right: 20, bottom: 20 } : { left: 10, top: 10, right: 10, bottom: innerHeight * 0.48 } });
   });
 
-  // HTML markers for actors
+  function edgeColor() {
+    const M = MODES[mode];
+    return ["match", ["get", M.prop], ...M.order.flatMap(t => [t, M.color(t)]), "#999"];
+  }
+
+  // HTML markers for actors: a round dot by water role, or a shape by deployment role
+  function markHTML(a) {
+    const lab = `<span class="lab">${esc(a.name)}</span>`;
+    if (mode === "water") return `<span class="dot" style="background:${color(a.type)}"></span>${lab}`;
+    const r = DROLES[MODES.deploy.key(a)];
+    return (r.shape === "dot" ? `<span class="dot none" style="background:${r.color}"></span>` : shapeSVG(r.shape, r.color, 18, "shape")) + lab;
+  }
   const markers = actors.map(a => {
     const el = document.createElement("button");
     el.className = "actor" + (a.left ? " left" : "");
     el.setAttribute("aria-label", a.name);
-    el.innerHTML = `<span class="dot" style="background:${color(a.type)}"></span><span class="lab">${esc(a.name)}</span>`;
+    el.innerHTML = markHTML(a);
     el.addEventListener("click", ev => { ev.stopPropagation(); select(a); });
     a.el = el;
     return new maplibregl.Marker({ element: el, anchor: a.left ? "right" : "left" }).setLngLat(a.pos).addTo(map);
   });
 
-  // legend toggles
-  const on = new Set(order);
+  // legend toggles; each mode keeps its own on/off set
+  const onSets = { water: new Set(MODES.water.order), deploy: new Set(MODES.deploy.order) };
   const typesEl = document.getElementById("types");
   function drawTypes() {
+    const M = MODES[mode], on = onSets[mode];
     typesEl.innerHTML = "";
-    order.forEach(t => {
-      const n = actors.filter(a => a.type === t).length; if (!n) return;
+    M.order.forEach(t => {
+      const n = actors.filter(a => M.key(a) === t).length;
+      // water roles list only what is present; all six deployment roles always show, empty ones dimmed
+      if (!n && (mode === "water" || t === "none")) return;
       const b = document.createElement("button");
-      b.className = "type"; b.setAttribute("aria-pressed", on.has(t));
-      b.innerHTML = `<span class="sw" style="background:${color(t)}"></span>${TYPES[t]}<span class="count">${n}</span>`;
+      b.className = "type"; b.setAttribute("aria-pressed", on.has(t)); b.disabled = !n;
+      b.innerHTML = `${swatch(mode, t)}${esc(M.label(t))}<span class="count">${n}</span>`;
       b.onclick = () => { on.has(t) ? on.delete(t) : on.add(t); apply(); drawTypes(); };
       typesEl.appendChild(b);
     });
   }
   function apply() {
-    actors.forEach(a => a.el.classList.toggle("dim", !on.has(a.type)));
-    const f = ["in", ["get", "type"], ["literal", [...on]]];
+    const M = MODES[mode], on = onSets[mode];
+    actors.forEach(a => a.el.classList.toggle("dim", !on.has(M.key(a))));
+    const f = ["in", ["get", M.prop], ["literal", [...on]]];
     if (map.getLayer("edges-legal")) {
       map.setFilter("edges-legal", ["all", ["==", ["get", "legal"], true], f]);
       map.setFilter("edges-soft", ["all", ["==", ["get", "legal"], false], f]);
     }
   }
   drawTypes();
+
+  const colorBy = document.getElementById("colorBy");
+  colorBy.addEventListener("click", e => {
+    const b = e.target.closest("button[data-mode]"); if (!b || b.dataset.mode === mode) return;
+    mode = b.dataset.mode;
+    colorBy.querySelectorAll("button").forEach(x => x.setAttribute("aria-checked", x === b));
+    actors.forEach(a => { a.el.innerHTML = markHTML(a); });
+    if (map.getLayer("edges-legal")) ["edges-legal", "edges-soft"].forEach(id => map.setPaintProperty(id, "line-color", edgeColor()));
+    apply(); drawTypes();
+  });
 
   const card = document.getElementById("card");
   function select(a) {
@@ -225,7 +305,8 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
       <span class="badge ${a.verified ? "verified" : "unverified"}">${a.verified ? "Verified" : "Unverified"}</span>
       <h3>${esc(a.name)}</h3>
       <dl>
-        <dt>Role</dt><dd><span class="sw" style="display:inline-block;background:${color(a.type)}"></span> ${esc(TYPES[a.type] || a.type)}</dd>
+        <dt>Water role</dt><dd><span class="sw" style="display:inline-block;background:${color(a.type)}"></span> ${esc(TYPES[a.type] || a.type)}</dd>
+        <dt>Deployment role</dt><dd>${a.deployment_role ? `${swatch("deploy", a.deployment_role)} ${esc(DROLES[a.deployment_role].label)}` : "None"}</dd>
         <dt>Relationship</dt><dd>${esc(a.relationship.replace(/_/g, " "))}</dd>
         <dt>How</dt><dd>${esc(a.instrument)}</dd>
         <dt>Source</dt><dd>${esc(a.source)}</dd>
