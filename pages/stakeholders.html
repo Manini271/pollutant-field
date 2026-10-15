@@ -65,8 +65,9 @@ h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; te
 
 .actor { background: none; border: 0; padding: 0; font: inherit; display: flex; align-items: center; gap: 6px; cursor: pointer; transform: translateY(-50%); }
 .actor .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.4); flex: none; }
-.actor .lab { font-size: 12px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.9); white-space: nowrap; max-width: 210px; overflow: hidden; text-overflow: ellipsis; }
+.actor .lab { font-size: 12px; line-height: 1.25; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.9); width: max-content; max-width: 190px; text-align: left; }
 .actor.left { flex-direction: row-reverse; }
+.actor.left .lab { text-align: right; }
 .actor.dim { opacity: .2; }
 .actor .dot.none { width: 9px; height: 9px; border-width: 1.5px; }
 .actor .shape { flex: none; border-radius: 3px; filter: drop-shadow(0 0 1px rgba(0,0,0,.7)); }
@@ -199,26 +200,48 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
 
   // Actors without a location sit on the ring in arcs, one arc per category of the active color-by
   // mode, with a gap between arcs. Their lines run to the deployment site.
+  // Actors are spaced by height, not by angle: clockwise down the right side, then up the left, each
+  // getting vertical room for its own label (a wrapped three-line name gets more than a short one).
+  // Equal angles would crowd labels near the top and bottom of the ring, where neighbors sit almost level.
+  // ringNeed is the ring radius in screen pixels at which no two labels overlap.
   const edges = { type: "FeatureCollection", features: [] };
+  let ringNeed = 0;
   function placeActors() {
-    const M = MODES[mode], GAP = 1.5;   // gap between arcs, in actor slots
+    const M = MODES[mode], GAP = 18;   // px between arcs
+    const room = a => a.labelH + 6;
     const groups = M.order.map(t => actors.filter(a => !a.location && M.key(a) === t)).filter(g => g.length);
-    const slots = groups.reduce((n, g) => n + g.length, 0) + GAP * groups.length;
+    const total = groups.reduce((n, g) => n + g.reduce((m, a) => m + room(a), 0), 0) + GAP * groups.length;
     let s = GAP / 2;   // start half a gap past 12 o'clock so the top of the ring falls between arcs
     groups.forEach(g => {
       g.forEach(a => {
-        const ang = Math.PI / 2 - (2 * Math.PI * (s + 0.5)) / slots;
-        a.pos = onRing(ang);
-        a.left = Math.cos(ang) < -0.05;   // labels on the left half point outward
-        s += 1;
+        const u = (s + room(a) / 2) / total, right = u < 0.5;
+        const y = right ? 1 - 4 * u : 4 * u - 3;   // height on the ring, from 1 (top) to -1 (bottom)
+        a.pos = onRing(right ? Math.asin(y) : Math.PI - Math.asin(y));
+        a.left = !right;   // labels on the left half point outward
+        s += room(a);
       });
       s += GAP;
     });
+    ringNeed = total / 4;   // each side spans 2R and holds half the total
     actors.filter(a => a.location).forEach(a => { a.pos = [a.location.lon, a.location.lat]; a.left = false; });
     edges.features = actors.map(a => ({ type: "Feature",
       properties: { id: a.id, type: a.type, drole: MODES.deploy.key(a), legal: LEGAL.has(a.relationship) },
       geometry: { type: "LineString", coordinates: [a.pos, FOCUS] } }));
   }
+  actors.forEach(a => {
+    const el = document.createElement("button");
+    el.className = "actor";
+    el.setAttribute("aria-label", a.name);
+    el.innerHTML = markHTML(a);
+    el.addEventListener("click", ev => { ev.stopPropagation(); select(a); });
+    a.el = el;
+  });
+  // measure each label's wrapped height off screen, before any marker is placed
+  const measure = document.createElement("div");
+  measure.style.cssText = "position:absolute;visibility:hidden;left:-9999px;top:0";
+  document.body.appendChild(measure);
+  actors.forEach(a => { measure.appendChild(a.el); a.labelH = a.el.offsetHeight; });
+  measure.remove();
   placeActors();
 
   const map = new maplibregl.Map({
@@ -269,10 +292,13 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
       map.on("mouseenter", "monitors", () => map.getCanvas().style.cursor = "pointer");
       map.on("mouseleave", "monitors", () => map.getCanvas().style.cursor = "");
     }
-    // open on the whole ring, leaving room for the side panel and for labels pointing out of the ring
+    // open on the whole ring, leaving room for the side panel and for labels pointing out of the ring,
+    // but never so far out that ring labels overlap; on a small window part of the ring is then off screen
     const wide = innerWidth > 700, lab = wide ? 220 : 40;
-    map.fitBounds([[center[0] - R / k, center[1] - R], [center[0] + R / k, center[1] + R]], { duration: 4500, essential: true,
-      padding: wide ? { left: 360 + lab, top: 40, right: 20 + lab, bottom: 40 } : { left: 10 + lab, top: 30, right: 10 + lab, bottom: innerHeight * 0.48 } });
+    const padding = wide ? { left: 360 + lab, top: 40, right: 20 + lab, bottom: 40 } : { left: 10 + lab, top: 30, right: 10 + lab, bottom: innerHeight * 0.48 };
+    const fit = map.cameraForBounds([[center[0] - R / k, center[1] - R], [center[0] + R / k, center[1] + R]], { padding });
+    const zoomFor = px => Math.log2((px * 40075016.686 * k) / (512 * R * 111320));   // zoom at which the ring radius is px
+    map.flyTo({ center, padding, zoom: Math.max(fit ? fit.zoom : 0, zoomFor(ringNeed)), duration: 4500, essential: true });
   });
 
   const focusEl = document.createElement("div");
@@ -294,14 +320,6 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
     const r = DROLES[MODES.deploy.key(a)];
     return (r.shape === "dot" ? `<span class="dot none" style="background:${r.color}"></span>` : shapeSVG(r.shape, r.color, 18, "shape")) + lab;
   }
-  actors.forEach(a => {
-    const el = document.createElement("button");
-    el.className = "actor";
-    el.setAttribute("aria-label", a.name);
-    el.innerHTML = markHTML(a);
-    el.addEventListener("click", ev => { ev.stopPropagation(); select(a); });
-    a.el = el;
-  });
   // a marker's anchor side is fixed once created, so re-placing an actor means a new marker
   function mountMarkers() {
     actors.forEach(a => {
