@@ -77,10 +77,13 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); out
 
 /* field */
 .field { position: relative; overflow: hidden; }
-#canvas { display: block; width: 100%; height: 100%; cursor: default; }
+/* the canvas can outgrow the field (taller when callouts do not fit, wider on phones); this layer scrolls it */
+.scroller { position: absolute; inset: 0 0 34px 0; overflow: auto; scrollbar-gutter: stable; }
+#canvas { display: block; cursor: default; }
 .tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--panel); padding: 7px 10px; border-radius: 6px; font-size: 13px; max-width: 260px; line-height: 1.3; }
 .tip b { font-weight: 700; display: block; }
-.status { position: absolute; left: 20px; bottom: 14px; margin: 0; font-size: 13px; color: var(--muted); }
+/* the status gets its own strip under the scrolling layer so it never covers the field */
+.status { position: absolute; left: 20px; right: 20px; bottom: 9px; margin: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* drawer */
 .drawer { position: absolute; top: 0; right: 0; bottom: 0; width: min(380px, 100%); background: var(--panel); border-left: 1px solid var(--rule); overflow-y: auto; padding: 20px 22px 32px; }

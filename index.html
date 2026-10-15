@@ -17,7 +17,7 @@
       <h2>Arrange by</h2>
       <div class="seg" role="radiogroup" id="views"></div>
       <div class="threshold" id="thresholdWrap" hidden>
-        <label for="threshold">Counts as treated at <output id="thresholdOut">70</output>% median removal</label>
+        <label for="threshold">Count as removed at <output id="thresholdOut">70</output>% or more</label>
         <input type="range" id="threshold" min="10" max="99" value="70">
       </div>
     </section>
@@ -46,8 +46,10 @@
   </aside>
 
   <main class="field" id="field">
-    <canvas id="canvas" aria-label="Pollutant and treatment field" role="img"></canvas>
-    <div class="tip" id="tip" hidden></div>
+    <div class="scroller" id="scroller">
+      <canvas id="canvas" aria-label="Pollutant and treatment field" role="img"></canvas>
+      <div class="tip" id="tip" hidden></div>
+    </div>
     <p class="status" id="status" aria-live="polite"></p>
   </main>
 

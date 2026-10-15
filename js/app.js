@@ -59,17 +59,21 @@
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readTheme(); buildControls(); draw(); });
 
   // ------------------------------------------------------------ canvas
-  const field = document.getElementById("field");
+  const scroller = document.getElementById("scroller");
   const canvas = document.getElementById("canvas");
   const ctx = canvas.getContext("2d");
-  let W = 0, H = 0, dpr = 1;
+  let W = 0, H = 0, viewW = 0, viewH = 0, dpr = 1;
 
-  function resize() {
-    const b = field.getBoundingClientRect();
-    dpr = window.devicePixelRatio || 1;
-    W = b.width; H = b.height;
-    canvas.width = W * dpr; canvas.height = H * dpr;
+  // W x H is the canvas size: the visible area, or more when a view needs to scroll
+  function sizeCanvas(w, h) {
+    if (w === W && h === H && canvas.width === Math.round(w * dpr)) return;
+    W = w; H = h; canvas.style.width = w + "px"; canvas.style.height = h + "px";
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    viewW = scroller.clientWidth; viewH = scroller.clientHeight;
     layout(0.6);
   }
 
@@ -96,23 +100,125 @@
       case "scale":
         return [SOURCES.find(s => s.key === d.source).label];
       case "coverage": {
-        if (d.source === "gap") return ["Slips through", "Never measured"];
-        if (d.source === "bottom-up") return ["Reaches threshold", d.ttCat];
-        if (d.removal == null) return ["Slips through", "No removal data"];
-        return d.removal >= state.threshold ? ["Reaches threshold", d.ttCat] : ["Slips through", "Below threshold"];
+        if (d.source === "gap") return [NOT_REMOVED, NEVER];
+        if (d.source === "bottom-up") return [REMOVED, d.ttCat];
+        if (d.removal == null) return [NOT_REMOVED, "Removal not reported"];
+        return d.removal >= state.threshold ? [REMOVED, d.ttCat] : [NOT_REMOVED, `Removed less than ${state.threshold}%`];
       }
       default: return ["All"];
     }
   }
+  const REMOVED = "Removed reliably", NOT_REMOVED = "Not reliably removed", NEVER = "Never measured";
+  // groups and clusters that stand for missing treatment get a dashed outline
+  const DASHED = new Set([NOT_REMOVED, NEVER, "Not measured"]);
+  // views laid out as group slots; Scale's groups are single clusters, so they get a title and no callouts
+  const SLOT_VIEWS = new Set(["pollutant", "treatment", "coverage", "scale"]);
+  const SLOT_TITLE_H = 28;
 
-  let leaves = new Map();   // leafKey -> {x, y, R, color, label, depth, parentKey}
-  let parents = new Map();  // parentKey -> {label}
+  let leaves = new Map();   // leafKey -> {x, y, R, label, parentKey, text}
+  let parents = new Map();  // parentKey -> {label, x, y, R, top, colL, colR, bottom, left, right}
   let matrix = null;
 
-  function groupColor(view, path) {
-    if (view === "treatment" && C.tt[path[0]]) return C.tt[path[0]];
-    if (view === "coverage" && path[0] === "Reaches threshold") return C.tt[path[1]];
-    return C.muted;
+  // ------------------------------------------------------------ callout labels
+  const LABEL = { size: 12, line: 14, maxW: 150, padX: 4, padY: 2, gap: 3, lead: 22 };
+  const font = (w, s) => `${w} ${s}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
+  const boxH = l => l.text.h + LABEL.padY * 2;
+  const colH = col => col.reduce((t, l) => t + boxH(l) + LABEL.gap, 0);
+
+  // wrap to at most two lines within maxW; measured bold so a highlighted label still fits its box
+  function wrapLabel(text, maxW) {
+    ctx.font = font(700, LABEL.size);
+    const lines = [];
+    let cur = "";
+    for (const word of text.split(" ")) {
+      const t = cur ? cur + " " + word : word;
+      if (cur && ctx.measureText(t).width > maxW) { lines.push(cur); cur = word; } else cur = t;
+    }
+    if (cur) lines.push(cur);
+    if (lines.length > 2) lines.splice(1, lines.length - 1, lines.slice(1).join(" "));
+    return { lines, w: Math.max(...lines.map(l => ctx.measureText(l).width)), h: lines.length * LABEL.line };
+  }
+
+  // Each group gets a slot: title on top, its circle below, a callout column on each side.
+  // Slots fill rows across the field. Marks shrink until everything fits the visible height;
+  // past their floor the field grows taller and scrolls instead (and wider, on screens too narrow
+  // for one group and its callouts). Returns the size used.
+  function layoutSlots(nodes) {
+    const groups = new Map();
+    nodes.forEach(d => {
+      const path = pathFor(d), solo = path.length === 1, gk = "/" + path[0], lk = gk + "/" + (solo ? "" : path[1]);
+      d.path = path; d.leaf = lk;
+      let g = groups.get(gk); if (!g) groups.set(gk, g = { key: gk, label: path[0], leaves: new Map(), value: 0 });
+      let l = g.leaves.get(lk); if (!l) g.leaves.set(lk, l = { key: lk, label: solo ? path[0] : path[1], solo, value: 0 });
+      const v = (d.base + 1) ** 2 * 1.3; l.value += v; g.value += v;
+    });
+    const gs = [...groups.values()].sort((a, b) => b.value - a.value);
+    gs.forEach(g => {
+      g.list = [...g.leaves.values()].sort((a, b) => b.value - a.value);
+      g.list.forEach(l => { l.text = wrapLabel(l.label, LABEL.maxW); });
+    });
+
+    const pad = 24, gutter = 16, rowGap = 18, titleH = SLOT_TITLE_H;
+    const avail = viewW - pad * 2;
+    function build(s) {
+      gs.forEach(g => {
+        const circ = g.list.map(l => ({ l, r: s * Math.sqrt(l.value) + 8 }));
+        d3.packSiblings(circ);
+        const e = d3.packEnclose(circ);
+        circ.forEach(c => { c.l.dx = c.x - e.x; c.l.dy = c.y - e.y; c.l.R = c.r - 8; });
+        g.R = e.r + 12;
+        // callouts go on the side their cluster sits on, then the columns are evened out
+        const left = [], right = [];
+        g.list.forEach(l => { if (!l.solo) (l.dx < 0 ? left : right).push(l); });
+        for (;;) {
+          const [big, small] = colH(left) > colH(right) ? [left, right] : [right, left];
+          if (!big.length) break;
+          big.sort((a, b) => Math.abs(a.dx) - Math.abs(b.dx));
+          if (colH(big) - colH(small) <= boxH(big[0]) + LABEL.gap) break;
+          small.push(big.shift());
+        }
+        const colW = col => (col.length ? Math.max(...col.map(l => l.text.w)) + LABEL.padX * 2 + LABEL.lead : 0);
+        g.left = left; g.right = right; g.wL = colW(left); g.wR = colW(right);
+        g.w = g.wL + 2 * g.R + g.wR + gutter;
+        g.h = titleH + Math.max(2 * g.R, colH(left), colH(right));
+      });
+      const rows = [];
+      let row = null;
+      gs.forEach(g => {
+        if (!row || row.w + g.w > avail) rows.push(row = { gs: [], w: 0, h: 0 });
+        row.gs.push(g); row.w += g.w; row.h = Math.max(row.h, g.h);
+      });
+      const total = pad * 2 + rows.reduce((t, r) => t + r.h, 0) + rowGap * (rows.length - 1);
+      return { rows, total, fits: total <= viewH && rows.every(r => r.w <= avail) };
+    }
+
+    // largest mark scale that fits; if even the floor does not fit, use the floor and scroll
+    const sMin = 0.3, sMax = 1.35;
+    let s = sMin;
+    if (build(sMax).fits) s = sMax;
+    else if (build(sMin).fits) {
+      let lo = sMin, hi = sMax;
+      for (let i = 0; i < 14; i++) { const m = (lo + hi) / 2; if (build(m).fits) lo = m; else hi = m; }
+      s = lo;
+    }
+    const { rows, total } = build(s);
+    nodes.forEach(d => { d.r = d.base * s; });
+
+    const width = Math.max(viewW, Math.ceil(Math.max(...rows.map(r => r.w)) + pad * 2));
+    let y = pad;
+    rows.forEach(r => {
+      let x = pad + Math.max(0, (width - pad * 2 - r.w) / 2);
+      r.gs.forEach(g => {
+        const cx = x + gutter / 2 + g.wL + g.R, cy = y + titleH + g.R;
+        parents.set(g.key, { label: g.label, x: cx, y: cy, R: g.R, top: y, bottom: y + g.h,
+          colL: cx - g.R - LABEL.lead, colR: cx + g.R + LABEL.lead,
+          left: g.left.map(l => l.key), right: g.right.map(l => l.key) });
+        g.list.forEach(l => leaves.set(l.key, { x: cx + l.dx, y: cy + l.dy, R: l.R, label: l.label, text: l.text, solo: l.solo, parentKey: g.key }));
+        x += g.w;
+      });
+      y += r.h + rowGap;
+    });
+    return { width, height: Math.max(viewH, Math.ceil(total)) };
   }
 
   function layout(alpha = 0.9) {
@@ -120,7 +226,11 @@
     leaves = new Map(); parents = new Map(); matrix = null;
     const pad = 36;
 
-    if (state.view === "matrix") {
+    if (SLOT_VIEWS.has(state.view)) {
+      const { width, height } = layoutSlots(nodes);
+      sizeCanvas(width, height);
+    } else if (state.view === "matrix") {
+      sizeCanvas(viewW, viewH);
       const cols = [...TT_CATS, "None"], rows = FAMILIES;
       const left = 110, top = 50;
       const cw = (W - left - 20) / cols.length, ch = (H - top - 40) / rows.length;
@@ -136,43 +246,12 @@
       }));
       nodes.forEach(d => { d.leaf = `${d.family}|${d.ttCat || "None"}`; });
     } else if (state.view === "float") {
+      sizeCanvas(viewW, viewH);
       const R = Math.min(W, H) / 2 - pad;
       const need = Math.sqrt(nodes.reduce((s, d) => s + (d.base + 1) ** 2, 0) * 1.3);
       const rs = Math.max(0.35, Math.min(1.25, R / need));
       nodes.forEach(d => { d.r = d.base * rs; d.leaf = "All"; });
       leaves.set("All", { x: W / 2, y: H / 2, R: R });
-    } else {
-      // nested circle packing: root -> group -> leaf
-      const tree = { name: "root", children: [] };
-      const index = new Map();
-      nodes.forEach(d => {
-        const path = pathFor(d);
-        d.path = path;
-        let parent = tree, key = "";
-        path.forEach((name, i) => {
-          key += "/" + name;
-          let child = index.get(key);
-          if (!child) {
-            child = { name, key, path: path.slice(0, i + 1), children: i < path.length - 1 ? [] : undefined, value: 0 };
-            parent.children.push(child); index.set(key, child);
-          }
-          if (i === path.length - 1) child.value += (d.base + 1) ** 2 * 1.3;
-          parent = child;
-        });
-        d.leaf = key;
-      });
-      const root = d3.hierarchy(tree).sum(n => n.value || 0).sort((a, b) => b.value - a.value);
-      d3.pack().size([W - pad * 2, H - pad * 2]).padding(n => (n.depth === 0 ? 30 : 16))(root);
-      const lv = root.leaves().filter(l => l.data.value > 0);
-      const scale = d3.median(lv, l => l.r / Math.sqrt(l.data.value)) || 1;
-      const rs = Math.max(0.3, Math.min(1.35, scale));
-      nodes.forEach(d => { d.r = d.base * rs; });
-      root.each(n => {
-        if (n.depth === 0) return;
-        const entry = { x: n.x + pad, y: n.y + pad, R: n.r, label: n.data.name, path: n.data.path, depth: n.depth,
-          color: groupColor(state.view, n.data.path), parentKey: n.parent && n.parent.depth > 0 ? n.parent.data.key : null };
-        if (n.children) parents.set(n.data.key, entry); else leaves.set(n.data.key, entry);
-      });
     }
 
     nodes.forEach(d => {
@@ -248,27 +327,21 @@
     const nodes = sim.nodes();
     const highlighting = !!(state.selected || state.query);
 
-    // group cells
+    // group circles: outlines only, so the marks carry all the color.
+    // Groups are a little darker than their clusters; missing treatment is dashed.
     const leafHulls = new Map();
     if (state.view !== "float" && state.view !== "matrix") {
       leaves.forEach((L, key) => { const h = hullOf(key); if (h) leafHulls.set(key, h); });
-      // parents enclose their children
       parents.forEach((P, key) => {
         const kids = [...leafHulls.entries()].filter(([k]) => leaves.get(k).parentKey === key).map(([, h]) => h);
-        if (!kids.length) return;
+        if (!kids.length) { P.hull = null; return; }
         const e = d3.packEnclose(kids.map(h => ({ x: h.x, y: h.y, r: h.r })));
         P.hull = { x: e.x, y: e.y, r: e.r + 12 };
-        ctx.beginPath(); ctx.arc(P.hull.x, P.hull.y, P.hull.r, 0, Math.PI * 2);
-        ctx.setLineDash(P.label === "Slips through" || P.label === "Not measured" ? [5, 5] : []);
-        ctx.strokeStyle = C.ink; ctx.globalAlpha = 0.35; ctx.lineWidth = 1; ctx.stroke();
-        ctx.setLineDash([]); ctx.globalAlpha = 1;
+        ring(P.hull, C.muted, 0.55, DASHED.has(P.label));
       });
       leafHulls.forEach((h, key) => {
         const L = leaves.get(key);
-        ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2);
-        ctx.fillStyle = L.color; ctx.globalAlpha = 0.09; ctx.fill();
-        ctx.globalAlpha = 0.45; ctx.strokeStyle = L.color; ctx.lineWidth = 1; ctx.stroke();
-        ctx.globalAlpha = 1;
+        if (!L.solo) ring(h, C.rule, 1, DASHED.has(L.label));
       });
     }
     if (matrix) drawMatrixFrame();
@@ -298,25 +371,58 @@
       ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.stroke();
     }
 
-    // labels last so they sit on top; skip any that would collide, hovered cell wins
-    if (state.view !== "float" && state.view !== "matrix") {
-      const items = [];
-      parents.forEach(P => { if (P.hull) items.push({ t: P.label, x: P.hull.x, y: P.hull.y - P.hull.r - 4, size: 15, w: 700, c: C.ink, p: 1e6 }); });
-      leafHulls.forEach((h, key) => {
-        const L = leaves.get(key);
-        if (L.label === "All") return;
-        const hot = focus && focus.leaf === key;
-        items.push({ t: L.label, x: h.x, y: h.y - h.r - 3, size: 12, w: hot ? 700 : 500, c: hot ? C.ink : C.muted, p: hot ? 2e6 : h.r });
+    // labels on top of everything
+    if (SLOT_VIEWS.has(state.view)) drawCallouts(leafHulls, focus);
+  }
+
+  function ring(h, color, alpha, dashed) {
+    ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2);
+    ctx.setLineDash(dashed ? [5, 5] : []);
+    ctx.strokeStyle = color; ctx.globalAlpha = alpha; ctx.lineWidth = 1; ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+  }
+
+  // Every cluster gets a label in its group's left or right column, stacked so none overlap,
+  // with a leader line to the cluster's edge. Leaders are drawn first, then the label boxes over them.
+  function drawCallouts(leafHulls, focus) {
+    const placed = [];
+    parents.forEach(P => {
+      [["left", P.colL], ["right", P.colR]].forEach(([side, ax]) => {
+        const items = P[side].map(k => ({ key: k, L: leaves.get(k), h: leafHulls.get(k) })).filter(it => it.h);
+        items.forEach(it => { it.bh = boxH(it.L); it.want = it.L.y - it.bh / 2; });
+        items.sort((a, b) => a.want - b.want);
+        let cur = P.top + SLOT_TITLE_H;
+        items.forEach(it => { it.y0 = Math.max(it.want, cur); cur = it.y0 + it.bh + LABEL.gap; });
+        let lim = P.bottom;
+        for (let i = items.length - 1; i >= 0; i--) {
+          const it = items[i];
+          if (it.y0 + it.bh > lim) it.y0 = lim - it.bh;
+          lim = it.y0 - LABEL.gap;
+        }
+        items.forEach(it => { it.side = side; it.ax = ax; it.ay = it.y0 + it.bh / 2; placed.push(it); });
       });
-      items.sort((a, b) => b.p - a.p);
-      const placed = [];
-      for (const it of items) {
-        ctx.font = `${it.w} ${it.size}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
-        const w = ctx.measureText(it.t).width + 6, box = { x0: it.x - w / 2, x1: it.x + w / 2, y0: it.y - it.size - 2, y1: it.y + 1 };
-        if (placed.some(b => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0)) continue;
-        placed.push(box); label(it.t, it.x, it.y, it.size, it.w, it.c);
-      }
-    }
+    });
+
+    ctx.strokeStyle = C.muted; ctx.lineWidth = 0.75; ctx.globalAlpha = 0.8;
+    placed.forEach(it => {
+      const { h } = it, dx = it.ax - h.x, dy = it.ay - h.y, dist = Math.hypot(dx, dy) || 1;
+      ctx.beginPath(); ctx.moveTo(it.ax, it.ay); ctx.lineTo(h.x + (dx / dist) * h.r, h.y + (dy / dist) * h.r); ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+
+    placed.forEach(it => {
+      const { lines, w } = it.L.text, bw = w + LABEL.padX * 2;
+      const x0 = it.side === "left" ? it.ax - bw : it.ax;
+      ctx.fillStyle = C.bg; ctx.fillRect(x0, it.y0, bw, it.bh);
+      const hot = focus && focus.leaf === it.key;
+      ctx.font = font(hot ? 700 : 500, LABEL.size); ctx.fillStyle = hot ? C.ink : C.muted;
+      ctx.textBaseline = "top"; ctx.textAlign = it.side === "left" ? "right" : "left";
+      const tx = it.side === "left" ? it.ax - LABEL.padX : it.ax + LABEL.padX;
+      lines.forEach((ln, i) => ctx.fillText(ln, tx, it.y0 + LABEL.padY + i * LABEL.line + 1));
+    });
+
+    // group titles above their circles, clear of the callout columns
+    parents.forEach(P => { if (P.hull) label(P.label, P.x, P.top + SLOT_TITLE_H - 8, 15, 700, C.ink); });
   }
 
   function drawMatrixFrame() {
@@ -353,7 +459,7 @@
       const pols = new Set(top.map(d => d.pollutant));
       const ok = new Set(top.filter(d => d.removal != null && d.removal >= state.threshold).map(d => d.pollutant));
       const gaps = ns.filter(d => d.source === "gap").length;
-      status.textContent = `${pols.size - ok.size} of ${pols.size} measured pollutants have no technology reaching ${state.threshold}% median removal` +
+      status.textContent = `${pols.size - ok.size} of ${pols.size} measured pollutants have no technology that removes ${state.threshold}% or more` +
         (gaps ? `, and ${gaps} are never measured.` : ".");
     } else {
       const p = new Set(ns.map(d => d.pollutant)).size;
@@ -388,7 +494,7 @@
     VIEWS.forEach(v => {
       const b = document.createElement("button");
       b.setAttribute("role", "radio"); b.setAttribute("aria-checked", state.view === v.key); b.textContent = v.label;
-      b.addEventListener("click", () => { state.view = v.key; buildControls(); layout(); });
+      b.addEventListener("click", () => { state.view = v.key; scroller.scrollTo(0, 0); buildControls(); layout(); });
       views.appendChild(b);
     });
     document.getElementById("thresholdWrap").hidden = state.view !== "coverage";
@@ -432,7 +538,7 @@
 
   // ------------------------------------------------------------ hover, click
   const tip = document.getElementById("tip");
-  const pct = v => (v == null ? "no removal data" : `${Math.round(v)}% median removal`);
+  const pct = v => (v == null ? "removal not reported" : `${Math.round(v)}% median removal`);
 
   function pick(ev) {
     const b = canvas.getBoundingClientRect();
@@ -522,5 +628,5 @@
 
   // ------------------------------------------------------------ go
   buildControls();
-  new ResizeObserver(resize).observe(field);
+  new ResizeObserver(resize).observe(scroller);
 })();
