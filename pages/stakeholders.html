@@ -79,7 +79,9 @@ h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; te
 .focus .ring::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: #fff; }
 .focus .lab { position: absolute; left: 31px; top: 50%; transform: translateY(-50%); font-size: 13px; font-weight: 700; color: #fff;
   white-space: nowrap; text-shadow: 0 1px 3px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.9); }
-button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
+.nav { display: inline-block; margin-bottom: 6px; font-size: 13px; color: var(--muted); text-decoration: none; }
+.nav:hover { color: var(--ink); text-decoration: underline; }
 @media (max-width: 700px) { .panel { top: auto; height: 46vh; width: auto; right: 16px; } }
 </style>
 </head>
@@ -87,6 +89,7 @@ button:focus-visible { outline: 2px solid var(--partner); outline-offset: 2px; }
 <div id="map"></div>
 <aside class="panel" aria-label="Actors">
   <div>
+    <a class="nav" href="../index.html">← Pollutant Field</a>
     <h1>Stakeholder Map</h1>
     <p class="sub" id="wbName">Loading…</p>
   </div>
