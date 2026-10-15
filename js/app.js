@@ -2,7 +2,8 @@
    One mark = one pollutant paired with one treatment technology.
    Shape  = pollutant family (circle biological, triangle chemical, square physical)
    Color  = treatment class
-   Ring   = bottom-up (grassroots) record, dashed outline = never measured */
+   Ring   = bottom-up (grassroots) record, dashed outline = never measured
+   Size   = the same for every mark; it carries no meaning for now */
 
 (() => {
   const DATA = window.WATER_DATA;
@@ -41,10 +42,8 @@
   };
 
   // ------------------------------------------------------------ nodes
-  const all = DATA.nodes.map(d => {
-    const base = d.source === "gap" ? 7 : d.source === "bottom-up" ? 6.5 : Math.min(9, 2.6 + Math.sqrt(d.n) * 0.9);
-    return { ...d, base, r: base, phase: Math.random() * Math.PI * 2 };
-  });
+  const BASE_R = 6.5;   // one base radius for every mark; each view still scales it to fit its layout
+  const all = DATA.nodes.map(d => ({ ...d, base: BASE_R, r: BASE_R, phase: Math.random() * Math.PI * 2 }));
 
   // ------------------------------------------------------------ theme
   let C = {};
